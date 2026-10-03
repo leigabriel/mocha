@@ -25,7 +25,6 @@ export default function App() {
     clusterSpreadText,
     thickness,
     finish,
-    soundEnabled,
     exportAnimType,
     setExportAnimType,
     filteredEmojis,
@@ -39,7 +38,6 @@ export default function App() {
     handleUpdateFinish,
     handleCameraView,
     handleSetSceneBackground,
-    handleToggleAudio,
     handleSpinCluster,
     handleNudgeCluster,
     handleResetPose,
@@ -89,7 +87,6 @@ export default function App() {
         clusterSpreadText={clusterSpreadText}
         thickness={thickness}
         finish={finish}
-        soundEnabled={soundEnabled}
         exportAnimType={exportAnimType}
         setExportAnimType={setExportAnimType}
         mobileOpen={mobileOpen}
@@ -107,7 +104,6 @@ export default function App() {
         onUpdateThickness={handleUpdateThickness}
         onUpdateFinish={handleUpdateFinish}
         onCameraView={handleCameraView}
-        onToggleAudio={handleToggleAudio}
         onExportGLB={handleExportGLB}
         onExportGLTF={handleExportGLTF}
         onExportOBJ={handleExportOBJ}
