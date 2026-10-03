@@ -1,25 +1,29 @@
-# 🍡 Mochi — 3D Pixel-Art Keychain Studio
+# ☕ Mocha — 3D Pixel-Art Keychain Studio
 
-> Mochi is a simple interactive tool that turns emojis into 3D pixel-art keychains.
+> Mocha is a simple interactive tool that turns emojis into 3D pixel-art keychains.
+
+> [!WARNING]
+> **Project Status: Active Development**  
+> Please note that this project is currently under active development. It may contain known issues, incomplete features, and unstable functionality as features and performance optimizations continue to be developed.
 
 <p align="center">
-  <img src="public/mochi.png" alt="Mochi 3D Pixel-Art Keychain Studio" width="100%" />
+  <img src="public/mocha.png" alt="Mocha 3D Pixel-Art Keychain Studio" width="100%" />
 </p>
 
 ---
 
-## 💡 What is Mochi?
+## 💡 What is Mocha?
 
-**Mochi** is a web-based 3D studio that transforms any 2D emoji into a tactile, retro-styled voxel charm suspended on a physical keychain assembly. 
+**Mocha** is a web-based 3D studio that transforms any 2D emoji into a tactile, retro-styled voxel charm suspended on a physical keychain assembly. 
 
-Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji (like 🥷, ❤️‍🔥, or 🏴‍☠️), Mochi parses the character, voxelizes its color palette, molds it into a 3D pixel block, and attaches it with mechanical jump rings to a shared master ring.
+Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji (like 🥷, ❤️‍🔥, or 🏴‍☠️), Mocha parses the character, voxelizes its color palette, molds it into a 3D pixel block, and attaches it with mechanical jump rings to a shared master ring.
 
 ### Key Highlights:
 - **Instant Voxelization**: Rasterizes and extrudes any emoji into solid, colorful 3D pixel geometry.
 - **Multi-Charm Cluster**: Attach up to 5 individual charms on a single master split ring.
 - **Physical Dynamics**: Interactive natural pendulum swing, 360° spin inertia, and soft collision repulsion accompanied by synthesized metallic chimes.
 - **Custom Hardware Finishes**: Choose between Steel, Gold, and Noir alloy finishes with adjustable link counts (4–10 links) and cluster fanning spread.
-- **Ready-to-Use 3D Exports**: Export animated models (.GLB and .GLTF) with baked swing physics loops, static .OBJ models, or high-resolution PNG snapshots.
+- **Selectable 3D Animation Exports**: Choose between **Swing** (pendulum physics loop) and **Spin** (continuous 360° turntable showcase) when exporting to `.GLB` or `.GLTF`, plus static `.OBJ` geometry and PNG snapshots.
 
 ---
 
@@ -46,7 +50,8 @@ Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji
    - **Camera Views**: Click **Front**, **Angle**, or **Master Ring** to jump to preset camera angles.
 
 5. **Export Your Creation**:
-   - **.GLB (Anim)**: Download a binary glTF file with baked 3.2s looping swing animation.
-   - **.GLTF (Anim)**: Download a JSON glTF model with embedded animation keyframes.
-   - **.OBJ (Static)**: Export clean static geometry for 3D modeling or 3D printing.
+   - **Select Animation Type**: Choose between **Swing** (natural gravity pendulum loop) or **Spin** (continuous 360° turntable showcase loop).
+   - **.GLB (Anim)**: Download a binary glTF file with your selected animation bundled.
+   - **.GLTF (Anim)**: Download a standard JSON glTF model with embedded animation keyframes.
+   - **.OBJ (Static)**: Export clean static geometry of your current 3D pose for modeling or 3D printing.
    - **Snapshot**: Capture a high-resolution PNG image directly from the canvas.
