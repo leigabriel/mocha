@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CONFIG, HARDWARE_MATS, EMOJI_DATABASE } from '../constants/index.js';
-import { playChime } from '../utils/audio.js';
 import { extractFirstEmoji } from '../utils/helpers.js';
 import { MasterKeychainCluster } from '../three/MasterKeychainCluster.js';
 import {
@@ -41,7 +40,6 @@ export function useKeychainStudio() {
   const [clusterSpreadText, setClusterSpreadText] = useState('COMPACT');
   const [thickness, setThickness] = useState(2);
   const [finish, setFinish] = useState('steel');
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [exportAnimType, setExportAnimType] = useState('swing'); // 'swing' | 'spin' | 'both'
 
   const showToast = useCallback((msg) => {
@@ -112,7 +110,6 @@ export function useKeychainStudio() {
       b.build(hwMaterial);
       masterCluster.updateMeshTransforms();
       syncStateFromCluster(activeCharmIndex);
-      playChime(0.5);
       showToast(`UPDATED CHARM #${activeCharmIndex + 1}: ${extracted}`);
     }
   }, [activeCharmIndex, showToast, syncStateFromCluster]);
@@ -168,7 +165,6 @@ export function useKeychainStudio() {
     b.build(hwMaterial);
     masterCluster.updateMeshTransforms();
     syncStateFromCluster(activeCharmIndex);
-    playChime(0.4);
     showToast(`CHARM #${activeCharmIndex + 1} CHAIN: ${count} LINKS`);
   };
 
@@ -218,7 +214,6 @@ export function useKeychainStudio() {
       setFinish(f);
       masterCluster.buildCluster();
       syncStateFromCluster(activeCharmIndex);
-      playChime(0.5);
       showToast(`ALLOY: ${f.toUpperCase()}`);
     }
   };
@@ -256,15 +251,6 @@ export function useKeychainStudio() {
     if (dirLight1) dirLight1.intensity = isLight ? 2.1 : 2.4;
 
     showToast(`SCENE BG: ${isLight ? '#EBEBEB' : '#212121'}`);
-  };
-
-  const handleToggleAudio = () => {
-    CONFIG.sound = !CONFIG.sound;
-    setSoundEnabled(CONFIG.sound);
-    if (CONFIG.sound) {
-      playChime(0.6);
-    }
-    showToast(CONFIG.sound ? 'AUDIO ENABLED' : 'AUDIO MUTED');
   };
 
   const handleSpinCluster = () => {
@@ -419,8 +405,6 @@ export function useKeychainStudio() {
             if (b.branchGroup === hitObj) selectCharm(i);
           });
         }
-
-        playChime(0.4);
       }
     };
 
@@ -452,7 +436,6 @@ export function useKeychainStudio() {
           1.15
         );
 
-        if (Math.abs(dx) > 12) playChime(0.25);
         return;
       }
 
@@ -472,7 +455,6 @@ export function useKeychainStudio() {
         masterCluster.omegaX = THREE.MathUtils.clamp(dragDeltaAccumY * 0.28, -7.0, 7.0);
 
         if (Math.abs(masterCluster.omegaY) > 0.8 || Math.abs(masterCluster.omegaX) > 0.4) {
-          playChime(0.65);
           showToast('CLUSTER SPUN & RELEASED');
         }
       }
@@ -549,7 +531,6 @@ export function useKeychainStudio() {
     clusterSpreadText,
     thickness,
     finish,
-    soundEnabled,
     exportAnimType,
     setExportAnimType,
     filteredEmojis,
@@ -564,7 +545,6 @@ export function useKeychainStudio() {
     handleUpdateFinish,
     handleCameraView,
     handleSetSceneBackground,
-    handleToggleAudio,
     handleSpinCluster,
     handleNudgeCluster,
     handleResetPose,
