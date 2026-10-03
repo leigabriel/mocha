@@ -15,7 +15,6 @@ export default function LeftPanel({
   clusterSpreadText,
   thickness,
   finish,
-  soundEnabled,
   exportAnimType,
   setExportAnimType,
   onSetSceneBackground,
@@ -31,7 +30,6 @@ export default function LeftPanel({
   onUpdateThickness,
   onUpdateFinish,
   onCameraView,
-  onToggleAudio,
   onExportGLB,
   onExportGLTF,
   onExportOBJ,
@@ -40,7 +38,7 @@ export default function LeftPanel({
   setMobileOpen = null
 }) {
   return (
-    <aside className={`w-full md:w-105 lg:w-112.5 h-full bg-brand text-white flex-col justify-between border-r border-white/20 z-40 shrink-0 overflow-y-auto ${mobileOpen ? 'fixed inset-0 flex' : 'hidden md:flex'}`}>
+    <aside className={`w-full md:w-[480px] lg:w-[520px] h-full bg-brand text-white flex-col justify-between border-r border-white/20 z-40 shrink-0 overflow-y-auto ${mobileOpen ? 'fixed inset-0 flex' : 'hidden md:flex'}`}>
       {/* Top Header */}
       <div className="p-4 border-b border-white/20 space-y-3">
         <div className="flex items-center justify-between">
@@ -456,30 +454,8 @@ export default function LeftPanel({
 
       {/* Bottom Actions / Export Section */}
       <div className="p-4 pb-20 md:pb-4 border-t border-white/20 space-y-2.5 bg-[#002bd4]">
-        {/* Audio Toggle */}
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-white/70 uppercase text-[10px] tracking-wider">
-            Metal Clink Audio
-          </span>
-          <button
-            id="audioToggleBtn"
-            onClick={onToggleAudio}
-            className="hud-btn-subtle px-2.5 py-0.5 text-[10px] flex items-center gap-1.5"
-          >
-            <i
-              id="audioIcon"
-              className={
-                soundEnabled
-                  ? 'fa-solid fa-volume-high text-[9px]'
-                  : 'fa-solid fa-volume-xmark text-[9px] text-white/50'
-              }
-            ></i>
-            <span id="audioStateText">{soundEnabled ? 'ON' : 'OFF'}</span>
-          </button>
-        </div>
-
         {/* PRIMARY ANIMATED CLUSTER EXPORTS: GLB & GLTF */}
-        <div className="space-y-1.5 pt-1 border-t border-white/20">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[9px] text-white/80 font-mono tracking-wider block uppercase">
               Export Cluster Assembly
