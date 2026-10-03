@@ -3,49 +3,72 @@ import { CONFIG } from '../constants/index.js';
 let audioCtx = null;
 let lastSoundTime = 0;
 
+export function getAudioContext() {
+  if (!audioCtx && typeof window !== 'undefined') {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+
+// Auto-unlock audio on the first user interaction (touch/pointer/key)
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    getAudioContext();
+    window.removeEventListener('pointerdown', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+  };
+  window.addEventListener('pointerdown', unlockAudio, { passive: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+}
+
 export function playChime(intensity = 0.5) {
   if (!CONFIG.sound) return;
   const nowMs = performance.now();
-  if (nowMs - lastSoundTime < 45) return;
+  if (nowMs - lastSoundTime < 35) return;
   lastSoundTime = nowMs;
 
   try {
-    if (!audioCtx) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (AudioContextClass) audioCtx = new AudioContextClass();
-    }
-    if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
-    const now = audioCtx.currentTime;
-    const freqs = [3800, 5400, 7200, 8800];
-    const gainVal = Math.min(0.024 * intensity, 0.040);
+    const now = ctx.currentTime;
+    // Harmonic metallic frequencies audible on phones, laptops, and speakers
+    const freqs = [1420, 2180, 3150, 4400];
+    const baseVol = Math.max(0.04, Math.min(0.18 * intensity, 0.22));
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(baseVol, now);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    masterGain.connect(ctx.destination);
 
     freqs.forEach((freq, idx) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      const filter = audioCtx.createBiquadFilter();
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
 
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(freq + (Math.random() * 40 - 20), now);
-      filter.Q.setValueAtTime(36, now);
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq + (Math.random() * 30 - 15), now);
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now);
+      const delay = idx * 0.003;
+      const partVol = 1 / (idx + 1.2);
+      oscGain.gain.setValueAtTime(0.0001, now + delay);
+      oscGain.gain.linearRampToValueAtTime(partVol, now + delay + 0.003);
+      oscGain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.12);
 
-      const delay = idx * 0.002;
-      gain.gain.setValueAtTime(0.0001, now + delay);
-      gain.gain.exponentialRampToValueAtTime(gainVal / (idx + 1), now + delay + 0.002);
-      gain.gain.exponentialRampToValueAtTime(0.00001, now + delay + 0.055);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(audioCtx.destination);
+      osc.connect(oscGain);
+      oscGain.connect(masterGain);
 
       osc.start(now + delay);
-      osc.stop(now + delay + 0.07);
+      osc.stop(now + delay + 0.14);
     });
   } catch {
-    // Audio unavailable
+    // Audio unavailable or blocked
   }
 }
