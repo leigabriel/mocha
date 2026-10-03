@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { CONFIG, HARDWARE_MATS } from '../constants/index.js';
-import { playChime } from '../utils/audio.js';
 import { createSplitRingMesh } from './meshBuilders.js';
 import { ClusterCharmBranch } from './ClusterCharmBranch.js';
 import { getClusterSlots } from './clusterSlots.js';
@@ -181,10 +180,6 @@ export class MasterKeychainCluster {
           b2.omegaZ -= pushX * dt * 14.0;
           b1.omegaX -= pushZ * dt * 14.0;
           b2.omegaX += pushZ * dt * 14.0;
-
-          if (overlap > 0.12) {
-            playChime(0.25 * overlap);
-          }
         }
       }
     }
@@ -240,15 +235,12 @@ export class MasterKeychainCluster {
       b.omegaZ += (Math.random() - 0.5) * 3.5 * force;
       b.omegaY += (Math.random() - 0.5) * 4.5 * force;
     });
-
-    playChime(0.65);
   }
 
   applySpin(speed = 6.5) {
     this.omegaY += (Math.random() > 0.5 ? 1 : -1) * speed;
     this.omegaX += (Math.random() - 0.5) * 1.8;
     this.omegaZ += (Math.random() - 0.5) * 1.8;
-    playChime(0.7);
   }
 
   resetPose() {
