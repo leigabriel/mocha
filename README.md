@@ -21,7 +21,7 @@ Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji
 ### Key Highlights:
 - **Instant Voxelization**: Rasterizes and extrudes any emoji into solid, colorful 3D pixel geometry.
 - **Multi-Charm Cluster**: Attach up to 5 individual charms on a single master split ring.
-- **Physical Dynamics**: Interactive natural pendulum swing, 360° spin inertia, and soft collision repulsion accompanied by synthesized metallic chimes.
+- **Physical Dynamics**: Interactive natural pendulum swing, 360° spin inertia, and soft collision repulsion.
 - **Custom Hardware Finishes**: Choose between Steel, Gold, and Noir alloy finishes with adjustable link counts (4–10 links) and cluster fanning spread.
 - **Selectable 3D Animation Exports**: Choose between **Swing** (pendulum physics loop) and **Spin** (continuous 360° turntable showcase) when exporting to `.GLB` or `.GLTF`, plus static `.OBJ` geometry and PNG snapshots.
 
