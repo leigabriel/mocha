@@ -42,6 +42,7 @@ export function useKeychainStudio() {
   const [thickness, setThickness] = useState(2);
   const [finish, setFinish] = useState('steel');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [exportAnimType, setExportAnimType] = useState('swing'); // 'swing' | 'spin' | 'both'
 
   const showToast = useCallback((msg) => {
     setToast({ text: msg, visible: true });
@@ -260,6 +261,9 @@ export function useKeychainStudio() {
   const handleToggleAudio = () => {
     CONFIG.sound = !CONFIG.sound;
     setSoundEnabled(CONFIG.sound);
+    if (CONFIG.sound) {
+      playChime(0.6);
+    }
     showToast(CONFIG.sound ? 'AUDIO ENABLED' : 'AUDIO MUTED');
   };
 
@@ -289,12 +293,12 @@ export function useKeychainStudio() {
 
   const handleExportGLB = () => {
     const { masterCluster } = threeRef.current;
-    exportGLB(masterCluster, showToast);
+    exportGLB(masterCluster, showToast, exportAnimType);
   };
 
   const handleExportGLTF = () => {
     const { masterCluster } = threeRef.current;
-    exportGLTF(masterCluster, showToast);
+    exportGLTF(masterCluster, showToast, exportAnimType);
   };
 
   const handleExportOBJ = () => {
@@ -546,6 +550,8 @@ export function useKeychainStudio() {
     thickness,
     finish,
     soundEnabled,
+    exportAnimType,
+    setExportAnimType,
     filteredEmojis,
     // Action handlers
     selectCharm,
