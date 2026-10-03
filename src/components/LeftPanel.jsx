@@ -16,6 +16,8 @@ export default function LeftPanel({
   thickness,
   finish,
   soundEnabled,
+  exportAnimType,
+  setExportAnimType,
   onSetSceneBackground,
   onAddCharm,
   onRemoveCharm,
@@ -33,18 +35,36 @@ export default function LeftPanel({
   onExportGLB,
   onExportGLTF,
   onExportOBJ,
-  onCaptureSnapshot
+  onCaptureSnapshot,
+  mobileOpen = false,
+  setMobileOpen = null
 }) {
   return (
-    <aside className="w-96 sm:w-[420px] md:w-[450px] lg:w-[470px] h-full bg-[#0034FF] text-white flex flex-col justify-between border-r border-white/20 z-40 flex-shrink-0 overflow-y-auto">
+    <aside className={`w-full md:w-105 lg:w-112.5 h-full bg-brand text-white flex-col justify-between border-r border-white/20 z-40 shrink-0 overflow-y-auto ${mobileOpen ? 'fixed inset-0 flex' : 'hidden md:flex'}`}>
       {/* Top Header */}
       <div className="p-4 border-b border-white/20 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5 font-pixel text-xs tracking-wider">
             <span className="inline-block w-2.5 h-2.5 bg-white"></span>
-            <span>MOCHI // KEYCHAIN STUDIO</span>
+            <span>MOCHA // KEYCHAIN STUDIO</span>
           </div>
-          <span className="text-white/60 font-mono text-[9px] uppercase tracking-wider">[1.SHARED.RING]</span>
+          <div className="flex items-center gap-2">
+            <span className="text-white/60 font-mono text-[9px] uppercase tracking-wider hidden sm:inline">[1.SHARED.RING]</span>
+            {setMobileOpen && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  window.dispatchEvent(new Event('resize'));
+                }}
+                className="md:hidden px-2 py-0.5 hud-btn-subtle text-[10px] font-bold flex items-center gap-1 uppercase tracking-wider hover:bg-white hover:text-brand"
+                title="Return to 3D Viewport"
+              >
+                <i className="fa-solid fa-xmark text-[9px]"></i>
+                <span>Close</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Scene Canvas Background Switcher */}
@@ -56,7 +76,7 @@ export default function LeftPanel({
               onClick={() => onSetSceneBackground('light')}
               className={`px-3 py-0.5 ${
                 bgMode === 'light'
-                  ? 'bg-white text-[#0034FF] font-semibold'
+                  ? 'bg-white text-brand font-semibold'
                   : 'text-white hover:bg-white/10'
               }`}
             >
@@ -67,7 +87,7 @@ export default function LeftPanel({
               onClick={() => onSetSceneBackground('dark')}
               className={`px-3 py-0.5 ${
                 bgMode === 'dark'
-                  ? 'bg-white text-[#0034FF] font-semibold'
+                  ? 'bg-white text-brand font-semibold'
                   : 'text-white hover:bg-white/10'
               }`}
             >
@@ -88,7 +108,7 @@ export default function LeftPanel({
             <button
               id="addClusterCharmBtn"
               onClick={onAddCharm}
-              className="hud-btn-subtle px-2.5 py-0.5 text-[9px] uppercase font-bold tracking-wider hover:bg-white hover:text-[#0034FF]"
+              className="hud-btn-subtle px-2.5 py-0.5 text-[9px] uppercase font-bold tracking-wider hover:bg-white hover:text-brand"
             >
               + Add To Ring
             </button>
@@ -103,7 +123,7 @@ export default function LeftPanel({
                   onClick={() => onSelectCharm(idx)}
                   className={`flex items-center gap-1.5 px-2.5 py-0.5 border text-xs cursor-pointer ${
                     isActive
-                      ? 'bg-white text-[#0034FF] font-bold border-white'
+                      ? 'bg-white text-brand font-bold border-white'
                       : 'border-white/30 text-white hover:bg-white/10'
                   }`}
                 >
@@ -162,7 +182,7 @@ export default function LeftPanel({
                     if (customEmojiInput.trim()) onApplyNewEmoji(customEmojiInput);
                   }, 10);
                 }}
-                className="flex-1 h-8 px-2.5 text-xs font-mono bg-white text-[#0034FF] placeholder-[#0034FF]/50 border border-white font-bold outline-none"
+                className="flex-1 h-8 px-2.5 text-xs font-mono bg-white text-brand placeholder-brand/50 border border-white font-bold outline-none"
               />
               <button
                 id="applyCustomEmojiBtn"
@@ -230,7 +250,7 @@ export default function LeftPanel({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="SEARCH PRESETS (CAT, PIZZA, SKULL, SWORD...)"
-              className="w-full h-6 px-2 text-[10px] bg-white/10 text-white placeholder-white/40 border border-white/30 uppercase outline-none focus:bg-white focus:text-[#0034FF] focus:placeholder-[#0034FF]/50 transition-colors"
+              className="w-full h-6 px-2 text-[10px] bg-white/10 text-white placeholder-white/40 border border-white/30 uppercase outline-none focus:bg-white focus:text-brand focus:placeholder-brand/50 transition-colors"
             />
           </div>
 
@@ -245,7 +265,7 @@ export default function LeftPanel({
                   onClick={() => setCategory(cat)}
                   className={`cat-tab-btn px-2 py-0.5 border ${
                     isActive
-                      ? 'active border-white bg-white text-[#0034FF]'
+                      ? 'active border-white bg-white text-brand'
                       : 'border-white/30 text-white hover:border-white'
                   }`}
                 >
@@ -268,7 +288,7 @@ export default function LeftPanel({
               filteredEmojis.map((item, idx) => (
                 <button
                   key={idx}
-                  className="emoji-item-btn p-1 border border-white/20 text-center text-sm hover:border-white hover:text-[#0034FF] cursor-pointer"
+                  className="emoji-item-btn p-1 border border-white/20 text-center text-sm hover:border-white hover:text-brand cursor-pointer"
                   title={`${item.char} (${item.tags})`}
                   onClick={() => onApplyNewEmoji(item.char)}
                 >
@@ -295,7 +315,7 @@ export default function LeftPanel({
             <button
               id="decLinksBtn"
               onClick={() => onUpdateLinks(chainLinks - 1)}
-              className="hud-btn-subtle w-7 h-7 text-xs flex items-center justify-center font-bold hover:bg-white hover:text-[#0034FF] cursor-pointer"
+              className="hud-btn-subtle w-7 h-7 text-xs flex items-center justify-center font-bold hover:bg-white hover:text-brand cursor-pointer"
               title="Decrease chain links"
             >
               -
@@ -313,7 +333,7 @@ export default function LeftPanel({
             <button
               id="incLinksBtn"
               onClick={() => onUpdateLinks(chainLinks + 1)}
-              className="hud-btn-subtle w-7 h-7 text-xs flex items-center justify-center font-bold hover:bg-white hover:text-[#0034FF] cursor-pointer"
+              className="hud-btn-subtle w-7 h-7 text-xs flex items-center justify-center font-bold hover:bg-white hover:text-brand cursor-pointer"
               title="Increase chain links"
             >
               +
@@ -435,7 +455,7 @@ export default function LeftPanel({
       </div>
 
       {/* Bottom Actions / Export Section */}
-      <div className="p-4 border-t border-white/20 space-y-2.5 bg-[#002bd4]">
+      <div className="p-4 pb-20 md:pb-4 border-t border-white/20 space-y-2.5 bg-[#002bd4]">
         {/* Audio Toggle */}
         <div className="flex items-center justify-between text-[11px]">
           <span className="text-white/70 uppercase text-[10px] tracking-wider">
@@ -464,9 +484,55 @@ export default function LeftPanel({
             <span className="text-[9px] text-white/80 font-mono tracking-wider block uppercase">
               Export Cluster Assembly
             </span>
-            <span className="text-[8px] bg-white text-[#0034FF] px-1 font-bold">
+            <span className="text-[8px] bg-white text-brand px-1 font-bold">
               BAKED PHYSICS
             </span>
+          </div>
+
+          {/* Animation Mode Selector */}
+          <div className="space-y-1 pt-0.5">
+            <div className="flex items-center justify-between text-[9px] text-white/70">
+              <span className="uppercase tracking-wider">Animation Track</span>
+              <span className="font-mono text-white/90 font-bold uppercase">{exportAnimType}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 text-[9px] uppercase">
+              <button
+                type="button"
+                onClick={() => setExportAnimType('swing')}
+                className={`py-1 border text-center font-bold tracking-wider ${
+                  exportAnimType === 'swing'
+                    ? 'bg-white text-brand border-white'
+                    : 'border-white/30 text-white hover:border-white'
+                }`}
+                title="Embed natural gravity pendulum swing animation"
+              >
+                Swing
+              </button>
+              <button
+                type="button"
+                onClick={() => setExportAnimType('spin')}
+                className={`py-1 border text-center font-bold tracking-wider ${
+                  exportAnimType === 'spin'
+                    ? 'bg-white text-brand border-white'
+                    : 'border-white/30 text-white hover:border-white'
+                }`}
+                title="Embed 360° showcase turntable rotation animation"
+              >
+                Spin 360°
+              </button>
+              <button
+                type="button"
+                onClick={() => setExportAnimType('both')}
+                className={`py-1 border text-center font-bold tracking-wider ${
+                  exportAnimType === 'both'
+                    ? 'bg-white text-brand border-white'
+                    : 'border-white/30 text-white hover:border-white'
+                }`}
+                title="Embed both Swing and Spin 360° animation clips in the GLB/GLTF"
+              >
+                Both Clips
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-1.5">
             <button
