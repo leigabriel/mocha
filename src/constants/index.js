@@ -1,6 +1,5 @@
 export const CONFIG = {
   bgMode: 'light',
-  sound: true,
   scaleVoxel: 0.042,
 
   // Master Top Split Ring (Shared anchor for all cluster charms)
