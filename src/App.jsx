@@ -1,122 +1,95 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import Toast from './components/Toast.jsx';
+import LeftPanel from './components/LeftPanel.jsx';
+import Viewport from './components/Viewport.jsx';
+import { useKeychainStudio } from './hooks/useKeychainStudio.js';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const {
+    containerRef,
+    toast,
+    bgMode,
+    branches,
+    activeCharmIndex,
+    activeBranch,
+    customEmojiInput,
+    setCustomEmojiInput,
+    category,
+    setCategory,
+    searchQuery,
+    setSearchQuery,
+    chainLinks,
+    clusterSpread,
+    clusterSpreadText,
+    thickness,
+    finish,
+    soundEnabled,
+    filteredEmojis,
+    selectCharm,
+    applyNewEmoji,
+    handleAddCharm,
+    handleRemoveCharm,
+    handleUpdateLinks,
+    handleUpdateSpread,
+    handleUpdateThickness,
+    handleUpdateFinish,
+    handleCameraView,
+    handleSetSceneBackground,
+    handleToggleAudio,
+    handleSpinCluster,
+    handleNudgeCluster,
+    handleResetPose,
+    handleExportGLB,
+    handleExportGLTF,
+    handleExportOBJ,
+    handleCaptureSnapshot
+  } = useKeychainStudio();
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="w-screen h-screen flex flex-row overflow-hidden bg-sceneLight">
+      {/* In-Canvas Toast Notification */}
+      <Toast toast={toast} />
 
-      <div className="ticks"></div>
+      {/* WIDER LEFT PANEL: #0034FF with Pure White Typography and Sharp Controls */}
+      <LeftPanel
+        bgMode={bgMode}
+        branches={branches}
+        activeCharmIndex={activeCharmIndex}
+        activeBranch={activeBranch}
+        customEmojiInput={customEmojiInput}
+        setCustomEmojiInput={setCustomEmojiInput}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        category={category}
+        setCategory={setCategory}
+        filteredEmojis={filteredEmojis}
+        chainLinks={chainLinks}
+        clusterSpread={clusterSpread}
+        clusterSpreadText={clusterSpreadText}
+        thickness={thickness}
+        finish={finish}
+        soundEnabled={soundEnabled}
+        onSetSceneBackground={handleSetSceneBackground}
+        onAddCharm={handleAddCharm}
+        onRemoveCharm={handleRemoveCharm}
+        onSelectCharm={selectCharm}
+        onApplyNewEmoji={applyNewEmoji}
+        onSpinCluster={handleSpinCluster}
+        onNudgeCluster={handleNudgeCluster}
+        onResetPose={handleResetPose}
+        onUpdateLinks={handleUpdateLinks}
+        onUpdateSpread={handleUpdateSpread}
+        onUpdateThickness={handleUpdateThickness}
+        onUpdateFinish={handleUpdateFinish}
+        onCameraView={handleCameraView}
+        onToggleAudio={handleToggleAudio}
+        onExportGLB={handleExportGLB}
+        onExportGLTF={handleExportGLTF}
+        onExportOBJ={handleExportOBJ}
+        onCaptureSnapshot={handleCaptureSnapshot}
+      />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {/* RIGHT MAIN VIEWPORT: 3D Canvas Area */}
+      <Viewport containerRef={containerRef} />
+    </div>
+  );
 }
-
-export default App
