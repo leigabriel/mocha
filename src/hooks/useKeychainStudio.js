@@ -1,517 +1,463 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { CONFIG, HARDWARE_MATS, EMOJI_DATABASE } from '../constants/index.js';
-import { extractFirstEmoji } from '../utils/helpers.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ADD_POOL, EMOJI_DATABASE, MAX_LINKS, MIN_LINKS, MM_PER_UNIT, SPREAD_MAX, SPREAD_MIN } from '../constants/index.js';
 import { MasterKeychainCluster } from '../three/MasterKeychainCluster.js';
+import { createStudio } from '../three/studio.js';
+import { attachInteraction } from '../three/interaction.js';
+import { clamp, extractFirstEmoji, saveDataUrl } from '../utils/helpers.js';
 import {
-  exportGLB,
-  exportGLTF,
-  exportOBJ,
-  captureSnapshot
-} from '../three/exporters.js';
+  defaultDesign,
+  loadStoredDesign,
+  parseDesign,
+  readHashDesign,
+  saveStoredDesign,
+  serializeDesign,
+  shareUrl,
+  writeHashDesign,
+} from '../utils/design.js';
+import { DesignHistory } from '../utils/history.js';
+
+const TOAST_MS = 1800;
+const COMMIT_DEBOUNCE_MS = 400;
+
+const spreadLabel = (v) => (v < 0.9 ? 'TIGHT' : v > 1.15 ? 'WIDE' : 'COMPACT');
 
 export function useKeychainStudio() {
   const containerRef = useRef(null);
-  const threeRef = useRef({
-    scene: null,
-    camera: null,
-    renderer: null,
-    controls: null,
-    masterCluster: null,
-    ambientLight: null,
-    dirLight1: null,
-    dirLight2: null,
-    clock: null,
-    animId: null
-  });
+  const clusterRef = useRef(null);
+  const studioRef = useRef(null);
+  const interactionRef = useRef(null);
+  const historyRef = useRef(new DesignHistory());
+  const activeRef = useRef(0);
+  const bgRef = useRef('light');
+  const toastTimerRef = useRef(null);
+  const commitTimerRef = useRef(null);
 
   const [toast, setToast] = useState({ text: 'READY', visible: false });
-  const toastTimerRef = useRef(null);
-
   const [bgMode, setBgMode] = useState('light');
   const [branches, setBranches] = useState([]);
   const [activeCharmIndex, setActiveCharmIndex] = useState(0);
   const [customEmojiInput, setCustomEmojiInput] = useState('👾');
   const [category, setCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [chainLinks, setChainLinks] = useState(4);
+  const [chainLinks, setChainLinks] = useState(MIN_LINKS);
   const [clusterSpread, setClusterSpread] = useState(1.0);
-  const [clusterSpreadText, setClusterSpreadText] = useState('COMPACT');
   const [thickness, setThickness] = useState(2);
   const [finish, setFinish] = useState('steel');
-  const [exportAnimType, setExportAnimType] = useState('swing'); // 'swing' | 'spin' | 'both'
+  const [exportAnimType, setExportAnimType] = useState('swing');
+  const [snapshotTransparent, setSnapshotTransparent] = useState(false);
+  const [sizeMm, setSizeMm] = useState({ w: 0, h: 0, d: 0 });
+  const [historyFlags, setHistoryFlags] = useState({ canUndo: false, canRedo: false });
 
-  const showToast = useCallback((msg) => {
-    setToast({ text: msg, visible: true });
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => {
-      setToast(prev => ({ ...prev, visible: false }));
-    }, 1800);
+  const showToast = useCallback((text) => {
+    setToast({ text, visible: true });
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), TOAST_MS);
   }, []);
 
-  const syncStateFromCluster = useCallback((indexToSelect = null) => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
+  // ------------------------------------------------------------ state sync
 
-    const bList = masterCluster.branches.map((b, i) => ({
-      index: i,
-      emoji: b.emoji,
-      thickness: b.thickness,
-      chainLinks: b.chainLinks
-    }));
-    setBranches(bList);
+  const currentDesign = useCallback(() => {
+    const cluster = clusterRef.current;
+    return {
+      finish: cluster.finish,
+      spread: cluster.spread,
+      bg: bgRef.current,
+      charms: cluster.branches.map((b) => ({ emoji: b.emoji, thickness: b.thickness, links: b.chainLinks })),
+    };
+  }, []);
 
-    const idx = indexToSelect !== null ? indexToSelect : activeCharmIndex;
-    const clampedIdx = Math.max(0, Math.min(idx, bList.length - 1));
-    setActiveCharmIndex(clampedIdx);
+  const syncFromCluster = useCallback((index = activeRef.current) => {
+    const cluster = clusterRef.current;
+    if (!cluster) return;
 
-    const activeBranch = masterCluster.branches[clampedIdx];
-    if (activeBranch) {
-      setCustomEmojiInput(activeBranch.emoji);
-      setChainLinks(activeBranch.chainLinks || 4);
-      setThickness(activeBranch.thickness || 2);
+    setBranches(cluster.branches.map((b, i) => ({ index: i, emoji: b.emoji, thickness: b.thickness, chainLinks: b.chainLinks })));
+    const idx = clamp(index, 0, cluster.branches.length - 1);
+    activeRef.current = idx;
+    setActiveCharmIndex(idx);
+
+    const active = cluster.branches[idx];
+    if (active) {
+      setCustomEmojiInput(active.emoji);
+      setChainLinks(active.chainLinks);
+      setThickness(active.thickness);
     }
-    setFinish(masterCluster.finish);
-  }, [activeCharmIndex]);
+    setFinish(cluster.finish);
+    setClusterSpread(cluster.spread);
 
-  const selectCharm = useCallback((index) => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster || !masterCluster.branches[index]) return;
-
-    setActiveCharmIndex(index);
-    const b = masterCluster.branches[index];
-    setCustomEmojiInput(b.emoji);
-    setChainLinks(b.chainLinks || 4);
-    setThickness(b.thickness || 2);
-    showToast(`SELECTED CHARM #${index + 1}: ${b.emoji}`);
-  }, [showToast]);
-
-  const applyNewEmoji = useCallback((rawChar) => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
-
-    const extracted = extractFirstEmoji(rawChar);
-    const b = masterCluster.branches[activeCharmIndex];
-    if (b) {
-      setCustomEmojiInput(extracted);
-      b.emoji = extracted;
-
-      const matSpec = HARDWARE_MATS[masterCluster.finish] || HARDWARE_MATS.steel;
-      const hwMaterial = new THREE.MeshStandardMaterial({
-        color: matSpec.color,
-        metalness: matSpec.metalness,
-        roughness: matSpec.roughness,
-        transparent: false,
-        opacity: 1.0,
-        depthWrite: true,
-      });
-
-      b.build(hwMaterial);
-      masterCluster.updateMeshTransforms();
-      syncStateFromCluster(activeCharmIndex);
-      showToast(`UPDATED CHARM #${activeCharmIndex + 1}: ${extracted}`);
-    }
-  }, [activeCharmIndex, showToast, syncStateFromCluster]);
-
-  const handleAddCharm = () => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
-
-    const pool = ['💎', '⭐', '🍕', '🎮', '🚀', '🦄', '🕹️', '⚡', '👑', '🌈'];
-    const randomEmoji = pool[masterCluster.branches.length % pool.length];
-    const newBranch = masterCluster.addCharm(randomEmoji, 2, 4);
-    if (newBranch) {
-      const newIdx = masterCluster.branches.length - 1;
-      syncStateFromCluster(newIdx);
-      showToast(`ATTACHED ${randomEmoji} TO MASTER RING`);
-    }
-  };
-
-  const handleRemoveCharm = (idx) => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
-
-    if (masterCluster.removeCharm(idx)) {
-      const nextIdx = activeCharmIndex >= masterCluster.branches.length
-        ? masterCluster.branches.length - 1
-        : activeCharmIndex;
-      syncStateFromCluster(nextIdx);
-      showToast('REMOVED CHARM FROM RING');
-    }
-  };
-
-  const handleUpdateLinks = (newCount) => {
-    const count = THREE.MathUtils.clamp(parseInt(newCount), 4, 10);
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
-
-    const b = masterCluster.branches[activeCharmIndex];
-    if (!b) return;
-
-    b.chainLinks = count;
-    setChainLinks(count);
-
-    const matSpec = HARDWARE_MATS[masterCluster.finish] || HARDWARE_MATS.steel;
-    const hwMaterial = new THREE.MeshStandardMaterial({
-      color: matSpec.color,
-      metalness: matSpec.metalness,
-      roughness: matSpec.roughness,
-      transparent: false,
-      opacity: 1.0,
-      depthWrite: true,
+    const { min, max } = cluster.assemblyBounds;
+    setSizeMm({
+      w: Math.round((max.x - min.x) * MM_PER_UNIT),
+      h: Math.round((max.y - min.y) * MM_PER_UNIT),
+      d: Math.round((max.z - min.z) * MM_PER_UNIT),
     });
 
-    b.build(hwMaterial);
-    masterCluster.updateMeshTransforms();
-    syncStateFromCluster(activeCharmIndex);
-    showToast(`CHARM #${activeCharmIndex + 1} CHAIN: ${count} LINKS`);
-  };
+    interactionRef.current?.refreshHighlights();
+    studioRef.current?.refit(cluster.restBounds);
+  }, []);
 
-  const handleUpdateSpread = (val) => {
-    const spreadVal = parseFloat(val);
-    CONFIG.clusterSpread = spreadVal;
-    setClusterSpread(spreadVal);
-    setClusterSpreadText(
-      spreadVal < 0.9 ? 'TIGHT' : spreadVal > 1.15 ? 'WIDE' : 'COMPACT'
-    );
-    const { masterCluster } = threeRef.current;
-    if (masterCluster) masterCluster.updateMeshTransforms();
-  };
+  const persist = useCallback((design) => {
+    saveStoredDesign(design);
+    writeHashDesign(design);
+  }, []);
 
-  const handleUpdateThickness = (t) => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
+  const refreshHistoryFlags = useCallback(() => {
+    const h = historyRef.current;
+    setHistoryFlags({ canUndo: h.canUndo, canRedo: h.canRedo });
+  }, []);
 
-    const b = masterCluster.branches[activeCharmIndex];
-    if (b && t !== b.thickness) {
-      b.thickness = t;
-      setThickness(t);
+  const commit = useCallback(() => {
+    clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = null;
+    if (!clusterRef.current) return;
+    const design = currentDesign();
+    if (historyRef.current.push(serializeDesign(design))) persist(design);
+    refreshHistoryFlags();
+  }, [currentDesign, persist, refreshHistoryFlags]);
 
-      const matSpec = HARDWARE_MATS[masterCluster.finish] || HARDWARE_MATS.steel;
-      const hwMaterial = new THREE.MeshStandardMaterial({
-        color: matSpec.color,
-        metalness: matSpec.metalness,
-        roughness: matSpec.roughness,
-        transparent: false,
-        opacity: 1.0,
-        depthWrite: true,
-      });
+  const scheduleCommit = useCallback(() => {
+    clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(commit, COMMIT_DEBOUNCE_MS);
+  }, [commit]);
 
-      b.build(hwMaterial);
-      masterCluster.updateMeshTransforms();
-      syncStateFromCluster(activeCharmIndex);
-      showToast('THICKNESS UPDATED');
-    }
-  };
+  const applyDesign = useCallback(
+    (design) => {
+      const cluster = clusterRef.current;
+      const studio = studioRef.current;
+      if (!cluster || !studio) return;
+      cluster.loadDesign({ charms: design.charms.map((c) => ({ ...c })), finish: design.finish, spread: design.spread });
+      bgRef.current = design.bg;
+      setBgMode(design.bg);
+      studio.setBackground(design.bg);
+      syncFromCluster(Math.min(activeRef.current, design.charms.length - 1));
+    },
+    [syncFromCluster]
+  );
 
-  const handleUpdateFinish = (f) => {
-    const { masterCluster } = threeRef.current;
-    if (!masterCluster) return;
+  // -------------------------------------------------------------- actions
 
-    if (f !== masterCluster.finish) {
-      masterCluster.finish = f;
-      setFinish(f);
-      masterCluster.buildCluster();
-      syncStateFromCluster(activeCharmIndex);
-      showToast(`ALLOY: ${f.toUpperCase()}`);
-    }
-  };
+  const selectCharm = useCallback(
+    (index) => {
+      const cluster = clusterRef.current;
+      const b = cluster?.branches[index];
+      if (!b) return;
+      const changed = activeRef.current !== index;
+      activeRef.current = index;
+      setActiveCharmIndex(index);
+      setCustomEmojiInput(b.emoji);
+      setChainLinks(b.chainLinks);
+      setThickness(b.thickness);
+      interactionRef.current?.refreshHighlights();
+      if (changed) showToast(`SELECTED CHARM #${index + 1}: ${b.emoji}`);
+    },
+    [showToast]
+  );
 
-  const handleCameraView = (cam) => {
-    const { camera, controls } = threeRef.current;
-    if (!camera || !controls) return;
-
-    if (cam === 'front') {
-      camera.position.set(0, 0.12, 2.95);
-      controls.target.set(0, 0.10, 0);
-    } else if (cam === 'iso') {
-      camera.position.set(1.9, 0.85, 2.3);
-      controls.target.set(0, 0.10, 0);
-    } else if (cam === 'hardware') {
-      camera.position.set(0, 0.92, 1.45);
-      controls.target.set(0, 0.90, 0);
-    }
-    controls.update();
-    showToast(`CAMERA: ${cam.toUpperCase()}`);
-  };
-
-  const handleSetSceneBackground = (mode) => {
-    CONFIG.bgMode = mode;
-    setBgMode(mode);
-    const isLight = mode === 'light';
-    const colHex = isLight ? 0xEBEBEB : 0x212121;
-    const { scene, ambientLight, dirLight1 } = threeRef.current;
-
-    if (scene) scene.background.setHex(colHex);
-    if (containerRef.current) {
-      containerRef.current.style.backgroundColor = isLight ? '#EBEBEB' : '#212121';
-    }
-    if (ambientLight) ambientLight.intensity = isLight ? 1.25 : 0.95;
-    if (dirLight1) dirLight1.intensity = isLight ? 2.1 : 2.4;
-
-    showToast(`SCENE BG: ${isLight ? '#EBEBEB' : '#212121'}`);
-  };
-
-  const handleSpinCluster = () => {
-    const { masterCluster } = threeRef.current;
-    if (masterCluster) {
-      masterCluster.applySpin(9.0);
-      showToast('SPUN CLUSTER 360°');
-    }
-  };
-
-  const handleNudgeCluster = () => {
-    const { masterCluster } = threeRef.current;
-    if (masterCluster) {
-      masterCluster.applyImpulse(0.85);
-      showToast('SWUNG CLUSTER');
-    }
-  };
-
-  const handleResetPose = () => {
-    const { masterCluster } = threeRef.current;
-    if (masterCluster) {
-      masterCluster.resetPose();
-      showToast('RESET CLUSTER TO REST POSE');
-    }
-  };
-
-  const handleExportGLB = () => {
-    const { masterCluster } = threeRef.current;
-    exportGLB(masterCluster, showToast, exportAnimType);
-  };
-
-  const handleExportGLTF = () => {
-    const { masterCluster } = threeRef.current;
-    exportGLTF(masterCluster, showToast, exportAnimType);
-  };
-
-  const handleExportOBJ = () => {
-    const { masterCluster } = threeRef.current;
-    exportOBJ(masterCluster, showToast);
-  };
-
-  const handleCaptureSnapshot = () => {
-    const { renderer, scene, camera } = threeRef.current;
-    if (renderer && scene && camera) {
-      captureSnapshot(renderer, scene, camera, showToast);
-    }
-  };
-
-  // Initialize Three.js scene
-  useEffect(() => {
-    window.showToast = showToast;
-
-    const container = containerRef.current;
-    if (!container) return;
-
-    const w = container.clientWidth || (window.innerWidth - 450);
-    const h = container.clientHeight || window.innerHeight;
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xEBEBEB);
-
-    const camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 40);
-    camera.position.set(0, 0.12, 2.95);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
-    renderer.shadowMap.enabled = false;
-    container.innerHTML = '';
-    container.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.minDistance = 1.0;
-    controls.maxDistance = 5.0;
-    controls.target.set(0, 0.10, 0);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
-    scene.add(ambientLight);
-
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 2.1);
-    dirLight1.position.set(2.8, 4.5, 3.5);
-    dirLight1.castShadow = false;
-    scene.add(dirLight1);
-
-    const dirLight2 = new THREE.DirectionalLight(0xdbe4f2, 1.35);
-    dirLight2.position.set(-3.0, 2.5, -2.5);
-    dirLight2.castShadow = false;
-    scene.add(dirLight2);
-
-    const masterCluster = new MasterKeychainCluster(showToast);
-    masterCluster.addCharm('👾', 2, 4); // Center Hero (4 links)
-    masterCluster.addCharm('🥑', 2, 5); // Left Wing (5 links)
-    masterCluster.addCharm('🔥', 2, 4); // Right Wing (4 links)
-    scene.add(masterCluster.rootGroup);
-
-    const clock = new THREE.Clock();
-
-    threeRef.current = {
-      scene,
-      camera,
-      renderer,
-      controls,
-      masterCluster,
-      ambientLight,
-      dirLight1,
-      dirLight2,
-      clock,
-      animId: null
-    };
-
-    syncStateFromCluster(0);
-
-    // Pointer interactions
-    let lastClientX = 0;
-    let lastClientY = 0;
-    let dragDeltaAccumX = 0;
-    let dragDeltaAccumY = 0;
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-
-    const onPointerDown = (e) => {
-      const rect = container.getBoundingClientRect();
-      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(masterCluster.rootGroup.children, true);
-
-      if (hits.length > 0) {
-        masterCluster.isGrabbed = true;
-        controls.enabled = false;
-        container.style.cursor = 'grabbing';
-
-        lastClientX = e.clientX;
-        lastClientY = e.clientY;
-        dragDeltaAccumX = 0;
-        dragDeltaAccumY = 0;
-
-        masterCluster.dragTargetAngleX = masterCluster.thetaX;
-        masterCluster.dragTargetAngleZ = masterCluster.thetaZ;
-
-        let hitObj = hits[0].object;
-        while (hitObj && hitObj.parent && hitObj.parent !== masterCluster.rootGroup) {
-          hitObj = hitObj.parent;
-        }
-        if (hitObj) {
-          masterCluster.branches.forEach((b, i) => {
-            if (b.branchGroup === hitObj) selectCharm(i);
-          });
-        }
-      }
-    };
-
-    const onPointerMove = (e) => {
-      const rect = container.getBoundingClientRect();
-      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-      if (masterCluster && masterCluster.isGrabbed) {
-        const dx = e.clientX - lastClientX;
-        const dy = e.clientY - lastClientY;
-        lastClientX = e.clientX;
-        lastClientY = e.clientY;
-
-        dragDeltaAccumX = dx;
-        dragDeltaAccumY = dy;
-
-        masterCluster.thetaY += dx * 0.022;
-        masterCluster.omegaY = dx * 0.45;
-
-        masterCluster.dragTargetAngleZ = THREE.MathUtils.clamp(
-          masterCluster.dragTargetAngleZ - dx * 0.005, 
-          -1.15, 
-          1.15
-        );
-        masterCluster.dragTargetAngleX = THREE.MathUtils.clamp(
-          masterCluster.dragTargetAngleX + dy * 0.007, 
-          -1.15, 
-          1.15
-        );
-
+  const applyNewEmoji = useCallback(
+    (raw) => {
+      const cluster = clusterRef.current;
+      if (!cluster) return;
+      const emoji = extractFirstEmoji(raw);
+      if (!emoji) {
+        showToast('NOT AN EMOJI - PASTE OR TYPE ONE');
         return;
       }
+      const charm = cluster.updateCharm(activeRef.current, { emoji });
+      syncFromCluster();
+      commit();
+      showToast(
+        charm?.monochrome
+          ? `${emoji} HAS NO COLOUR GLYPH IN THIS BROWSER FONT`
+          : `UPDATED CHARM #${activeRef.current + 1}: ${emoji}`
+      );
+    },
+    [commit, showToast, syncFromCluster]
+  );
 
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(masterCluster.rootGroup.children, true);
-      container.style.cursor = hits.length > 0 ? 'grab' : 'default';
-    };
+  const handleAddCharm = useCallback(() => {
+    const cluster = clusterRef.current;
+    if (!cluster) return;
+    const emoji = ADD_POOL[cluster.branches.length % ADD_POOL.length];
+    const branch = cluster.addCharm(emoji, 2, MIN_LINKS);
+    if (!branch) return;
+    cluster.applyImpulse(0.5);
+    syncFromCluster(cluster.branches.length - 1);
+    commit();
+    showToast(`ATTACHED ${emoji} TO MASTER RING`);
+  }, [commit, showToast, syncFromCluster]);
 
-    const onPointerUp = () => {
-      if (masterCluster && masterCluster.isGrabbed) {
-        masterCluster.isGrabbed = false;
-        controls.enabled = true;
-        container.style.cursor = 'default';
+  const handleRemoveCharm = useCallback(
+    (index) => {
+      const cluster = clusterRef.current;
+      if (!cluster || !cluster.removeCharm(index)) return;
+      const active = activeRef.current;
+      // Keep the same charm selected when a charm before it is removed.
+      const next = index < active ? active - 1 : active;
+      cluster.applyImpulse(0.4);
+      syncFromCluster(next);
+      commit();
+      showToast('REMOVED CHARM FROM RING');
+    },
+    [commit, showToast, syncFromCluster]
+  );
 
-        masterCluster.omegaY = THREE.MathUtils.clamp(dragDeltaAccumX * 0.65, -12.0, 12.0);
-        masterCluster.omegaZ = THREE.MathUtils.clamp(-dragDeltaAccumX * 0.28, -7.0, 7.0);
-        masterCluster.omegaX = THREE.MathUtils.clamp(dragDeltaAccumY * 0.28, -7.0, 7.0);
+  const handleUpdateLinks = useCallback(
+    (value, { quiet = false } = {}) => {
+      const cluster = clusterRef.current;
+      const count = clamp(parseInt(value, 10) || MIN_LINKS, MIN_LINKS, MAX_LINKS);
+      if (!cluster || cluster.branches[activeRef.current]?.chainLinks === count) return;
+      cluster.updateCharm(activeRef.current, { chainLinks: count });
+      syncFromCluster();
+      scheduleCommit();
+      if (!quiet) showToast(`CHARM #${activeRef.current + 1} CHAIN: ${count} LINKS`);
+    },
+    [scheduleCommit, showToast, syncFromCluster]
+  );
 
-        if (Math.abs(masterCluster.omegaY) > 0.8 || Math.abs(masterCluster.omegaX) > 0.4) {
-          showToast('CLUSTER SPUN & RELEASED');
-        }
+  const handleUpdateSpread = useCallback(
+    (value) => {
+      const cluster = clusterRef.current;
+      if (!cluster) return;
+      cluster.setSpread(clamp(parseFloat(value) || 1, SPREAD_MIN, SPREAD_MAX));
+      syncFromCluster();
+      scheduleCommit();
+    },
+    [scheduleCommit, syncFromCluster]
+  );
+
+  const handleUpdateThickness = useCallback(
+    (mode) => {
+      const cluster = clusterRef.current;
+      if (!cluster || cluster.branches[activeRef.current]?.thickness === mode) return;
+      cluster.updateCharm(activeRef.current, { thickness: mode });
+      syncFromCluster();
+      commit();
+      showToast('THICKNESS UPDATED');
+    },
+    [commit, showToast, syncFromCluster]
+  );
+
+  const handleUpdateFinish = useCallback(
+    (f) => {
+      const cluster = clusterRef.current;
+      if (!cluster || f === cluster.finish) return;
+      cluster.setFinish(f);
+      setFinish(f);
+      commit();
+      showToast(`ALLOY: ${f.toUpperCase()}`);
+    },
+    [commit, showToast]
+  );
+
+  const handleCameraView = useCallback(
+    (view) => {
+      const cluster = clusterRef.current;
+      const studio = studioRef.current;
+      if (!cluster || !studio) return;
+      const ringCenter = cluster.ringMesh.getWorldPosition(cluster.anchorPos.clone());
+      studio.setView(view, cluster.restBounds, { center: ringCenter, radius: 0.3 });
+      showToast(`CAMERA: ${view.toUpperCase()}`);
+    },
+    [showToast]
+  );
+
+  const handleSetSceneBackground = useCallback(
+    (mode) => {
+      bgRef.current = mode;
+      setBgMode(mode);
+      studioRef.current?.setBackground(mode);
+      commit();
+      showToast(`SCENE: ${mode.toUpperCase()}`);
+    },
+    [commit, showToast]
+  );
+
+  const handleSpinCluster = useCallback(() => {
+    clusterRef.current?.applySpin(9.0);
+    showToast('SPUN CLUSTER 360°');
+  }, [showToast]);
+
+  const handleNudgeCluster = useCallback(() => {
+    clusterRef.current?.applyImpulse(0.85);
+    showToast('SWUNG CLUSTER');
+  }, [showToast]);
+
+  const handleResetPose = useCallback(() => {
+    clusterRef.current?.resetPose();
+    showToast('RESET CLUSTER TO REST POSE');
+  }, [showToast]);
+
+  const handleUndo = useCallback(() => {
+    if (commitTimerRef.current) commit();
+    const text = historyRef.current.undo();
+    const design = text && parseDesign(text);
+    if (!design) return;
+    applyDesign(design);
+    persist(design);
+    refreshHistoryFlags();
+    showToast('UNDO');
+  }, [applyDesign, commit, persist, refreshHistoryFlags, showToast]);
+
+  const handleRedo = useCallback(() => {
+    const text = historyRef.current.redo();
+    const design = text && parseDesign(text);
+    if (!design) return;
+    applyDesign(design);
+    persist(design);
+    refreshHistoryFlags();
+    showToast('REDO');
+  }, [applyDesign, persist, refreshHistoryFlags, showToast]);
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!clusterRef.current) return;
+    const url = shareUrl(currentDesign());
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('SHARE LINK COPIED');
+    } catch {
+      writeHashDesign(currentDesign());
+      showToast('COPY THE LINK FROM THE ADDRESS BAR');
+    }
+  }, [currentDesign, showToast]);
+
+  const withExporters = useCallback(
+    async (run) => {
+      try {
+        const mod = await import('../three/exporters.js');
+        await run(mod);
+      } catch (err) {
+        console.error(err);
+        showToast('EXPORT MODULE FAILED TO LOAD');
+      }
+    },
+    [showToast]
+  );
+
+  const handleExportGLB = useCallback(
+    () => withExporters((m) => m.exportGLB(clusterRef.current, showToast, exportAnimType)),
+    [exportAnimType, showToast, withExporters]
+  );
+  const handleExportGLTF = useCallback(
+    () => withExporters((m) => m.exportGLTF(clusterRef.current, showToast, exportAnimType)),
+    [exportAnimType, showToast, withExporters]
+  );
+  const handleExportOBJ = useCallback(
+    () => withExporters((m) => m.exportOBJ(clusterRef.current, showToast)),
+    [showToast, withExporters]
+  );
+
+  const handleCaptureSnapshot = useCallback(() => {
+    const studio = studioRef.current;
+    if (!studio) return;
+    const url = studio.snapshot({ scale: 2, transparent: snapshotTransparent });
+    saveDataUrl(url, `mocha_snapshot_${Date.now()}.png`);
+    showToast(snapshotTransparent ? 'SNAPSHOT SAVED (TRANSPARENT, 2X)' : 'SNAPSHOT SAVED (2X)');
+  }, [showToast, snapshotTransparent]);
+
+  /** Keyboard control for the focused 3D viewport. */
+  const handleViewportKeyDown = useCallback(
+    (e) => {
+      const cluster = clusterRef.current;
+      if (!cluster || e.ctrlKey || e.metaKey || e.altKey) return;
+      let handled = true;
+      switch (e.key) {
+        case 'ArrowLeft': cluster.nudge(-1); break;
+        case 'ArrowRight': cluster.nudge(1); break;
+        case 'ArrowUp': cluster.nudge(-1, 'x'); break;
+        case 'ArrowDown': cluster.nudge(1, 'x'); break;
+        case ' ': cluster.applyImpulse(0.85); showToast('SWUNG CLUSTER'); break;
+        case 's': case 'S': cluster.applySpin(9.0); showToast('SPUN CLUSTER 360°'); break;
+        case 'r': case 'R': cluster.resetPose(); showToast('RESET CLUSTER TO REST POSE'); break;
+        case '[': selectCharm((activeRef.current + cluster.branches.length - 1) % cluster.branches.length); break;
+        case ']': selectCharm((activeRef.current + 1) % cluster.branches.length); break;
+        default:
+          if (/^[1-5]$/.test(e.key) && cluster.branches[Number(e.key) - 1]) selectCharm(Number(e.key) - 1);
+          else handled = false;
+      }
+      if (handled) e.preventDefault();
+    },
+    [selectCharm, showToast]
+  );
+
+  // ---------------------------------------------------------- scene setup
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const cluster = new MasterKeychainCluster({ onToast: showToast });
+    let lastVersion = -1;
+    const studio = createStudio(container, {
+      anchor: cluster.anchorPos,
+      step: (dt) => {
+        const moved = cluster.update(dt);
+        const changed = moved || cluster.version !== lastVersion;
+        lastVersion = cluster.version;
+        return changed;
+      },
+    });
+    studio.scene.add(cluster.rootGroup);
+    clusterRef.current = cluster;
+    studioRef.current = studio;
+
+    interactionRef.current = attachInteraction({
+      canvas: studio.canvas,
+      camera: studio.camera,
+      controls: studio.controls,
+      cluster,
+      getSelectedIndex: () => activeRef.current,
+      onSelect: (index) => selectCharm(index),
+      onActivity: studio.invalidate,
+    });
+
+    const design = readHashDesign() ?? loadStoredDesign() ?? defaultDesign();
+    bgRef.current = design.bg;
+    setBgMode(design.bg);
+    studio.setBackground(design.bg);
+    cluster.loadDesign({ charms: design.charms, finish: design.finish, spread: design.spread });
+    historyRef.current = new DesignHistory();
+    historyRef.current.push(serializeDesign(design));
+    activeRef.current = 0;
+    syncFromCluster(0);
+    studio.frame({ bounds: cluster.restBounds, view: 'front', animate: false });
+
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if (key === 'y') {
+        e.preventDefault();
+        handleRedo();
       }
     };
-
-    container.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-
-    const onResize = () => {
-      if (!container) return;
-      const nw = container.clientWidth;
-      const nh = container.clientHeight;
-      if (!nw || !nh) return;
-      camera.aspect = nw / nh;
-      camera.updateProjectionMatrix();
-      renderer.setSize(nw, nh);
-    };
-
-    window.addEventListener('resize', onResize);
-
-    const animate = () => {
-      threeRef.current.animId = requestAnimationFrame(animate);
-      const dt = Math.min(clock.getDelta(), 0.033);
-
-      if (masterCluster) {
-        masterCluster.updatePhysics(dt);
-      }
-
-      controls.update();
-      renderer.render(scene, camera);
-    };
-
-    animate();
+    window.addEventListener('keydown', onKeyDown);
 
     return () => {
-      if (threeRef.current.animId) cancelAnimationFrame(threeRef.current.animId);
-      container.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('resize', onResize);
-      if (renderer.domElement && container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
-      }
-      renderer.dispose();
+      window.removeEventListener('keydown', onKeyDown);
+      clearTimeout(commitTimerRef.current);
+      clearTimeout(toastTimerRef.current);
+      interactionRef.current?.detach();
+      interactionRef.current = null;
+      studio.dispose();
+      cluster.dispose();
+      studioRef.current = null;
+      clusterRef.current = null;
     };
+    // The scene is created once per mount; handlers read live state through refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const q = searchQuery.trim().toLowerCase();
-  const filteredEmojis = EMOJI_DATABASE.filter(item => {
-    const matchCat = category === 'all' || item.cat === category;
-    const matchSearch = !q || item.char.includes(q) || item.tags.toLowerCase().includes(q);
-    return matchCat && matchSearch;
-  });
-
-  const activeBranch = branches[activeCharmIndex];
+  const filteredEmojis = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return EMOJI_DATABASE.filter((item) => {
+      const matchCat = category === 'all' || item.cat === category;
+      return matchCat && (!q || item.char.includes(q) || item.tags.toLowerCase().includes(q));
+    });
+  }, [category, searchQuery]);
 
   return {
     containerRef,
@@ -519,7 +465,7 @@ export function useKeychainStudio() {
     bgMode,
     branches,
     activeCharmIndex,
-    activeBranch,
+    activeBranch: branches[activeCharmIndex],
     customEmojiInput,
     setCustomEmojiInput,
     category,
@@ -528,13 +474,17 @@ export function useKeychainStudio() {
     setSearchQuery,
     chainLinks,
     clusterSpread,
-    clusterSpreadText,
+    clusterSpreadText: spreadLabel(clusterSpread),
     thickness,
     finish,
     exportAnimType,
     setExportAnimType,
+    snapshotTransparent,
+    setSnapshotTransparent,
+    sizeMm,
+    canUndo: historyFlags.canUndo,
+    canRedo: historyFlags.canRedo,
     filteredEmojis,
-    // Action handlers
     selectCharm,
     applyNewEmoji,
     handleAddCharm,
@@ -548,9 +498,13 @@ export function useKeychainStudio() {
     handleSpinCluster,
     handleNudgeCluster,
     handleResetPose,
+    handleUndo,
+    handleRedo,
+    handleCopyShareLink,
     handleExportGLB,
     handleExportGLTF,
     handleExportOBJ,
-    handleCaptureSnapshot
+    handleCaptureSnapshot,
+    handleViewportKeyDown,
   };
 }
