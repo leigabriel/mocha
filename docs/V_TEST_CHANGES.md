@@ -37,6 +37,12 @@ Numbers refer to the findings in `MOCHA_ANALYSIS.md`. "Verified" says how each f
 - Selection and hover use a soft emissive tint on the charm. No wireframe is drawn, and exports strip the tint.
 - Tests: no overlap at rest (1-5 charms x 3 thicknesses), while swinging, and in baked swing/spin clips.
 
+## Spin + Swing export (follow-up)
+- New **Spin + Swing** track bakes one clip, `Mocha_Spin_Swing`: a full 360° turn and two swing cycles in exactly 4.0 s, so the first and last frames are the same pose. The swing stays fixed in the world while the keychain turns on its own axis.
+- The charms and chains are simulated with the same collision solver as the other clips. The baked loop closes exactly (no stutter at the seam) and has no overlapping charms.
+- **All clips** now embeds Swing, Spin 360° and Spin + Swing as three separate animations.
+- Warm-up before recording was raised to 10 periods.
+
 ## Behaviour changes to be aware of
 - Hardware was rescaled (ring ≈ 40 mm across, links and jump rings larger) so it reads at real-world proportions.
 - Charm slots were re-laid-out: the centre charm is frontmost and the four others sit behind it. The original fifth slot ("front-right accent") is now a rear accent.
