@@ -32,7 +32,8 @@ Numbers refer to the findings in `MOCHA_ANALYSIS.md`. "Verified" says how each f
 ## Charm collision and the blue box (follow-up)
 - **Problem:** charms passed through each other (3-9 mm overlap at rest, up to ~11 mm swinging, on charms only 3-6 mm thick). The old "repulsion" was a 2D centroid spring that did nothing at rest, exports baked independent simulations, and the blue box was the always-on selection outline.
 - **Fix:** every charm is a rigid box tested against the others with a 15-axis separating-axis test (`src/three/collision.js`). Contacts swing the two chains apart and remove closing speed (`src/three/dynamics.js`). The same solver drives the live view, the rest pose, Reset, and the baked GLB/GLTF clips; baked frames get a final position-only pass.
-- The rest pose is now where the charms hang once they have settled against each other, so with 3+ charms some chains hang slightly tilted (up to about 25 degrees at worst with five 6 mm charms).
+- Charm mounts stay within a jump ring's reach of the ring wire (|z| ≤ 0.04), so every chain hangs from the ring itself; separation comes from tilt, not from moving mounts off the wire.
+- The rest pose is now where the charms hang once they have settled against each other, so with 3+ charms some chains hang slightly tilted (up to about 30 degrees at worst with five 6 mm charms).
 - Selection and hover use a soft emissive tint on the charm. No wireframe is drawn, and exports strip the tint.
 - Tests: no overlap at rest (1-5 charms x 3 thicknesses), while swinging, and in baked swing/spin clips.
 
