@@ -1,307 +1,270 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
-import { CONFIG } from '../constants/index.js';
+import { MM_PER_UNIT } from '../constants/index.js';
 import { downloadBlob } from '../utils/helpers.js';
-import { getClusterSlots } from './clusterSlots.js';
+import { resolveContacts, stepItems } from './dynamics.js';
+import { createBranchState, createMasterState } from './physics.js';
+import { branchPosition, branchQuaternion, masterQuaternion, pivotQuaternion, ringPosition, slotFor } from './pose.js';
+
+const FPS = 30;
+const SIM_DT = 1 / 240;
+const WARMUP_PERIODS = 5;
+const CLOSE_FRAMES = 9; // frames blended back onto frame 0 so the loop is seamless
+
+export const ANIMATION_LABELS = { swing: 'SWING', spin: 'SPIN 360°', both: 'SWING + SPIN' };
+
+// ------------------------------------------------------------------ baking
+
+const SWING_DURATION = 3.2;
+const SPIN_DURATION = 3.6;
+
+/** Scripted master motion for each clip; branches and charms are then *simulated*. */
+function swingMaster(t, out) {
+  const w = (Math.PI * 2 * 2) / SWING_DURATION;
+  const wy = (Math.PI * 2) / SWING_DURATION;
+  out.thetaX = 0.09 * Math.cos(w * t);
+  out.thetaZ = 0.13 * Math.sin(w * t);
+  out.thetaY = 0.08 * Math.sin(wy * t);
+  out.omegaX = -0.09 * w * Math.sin(w * t);
+  out.omegaZ = 0.13 * w * Math.cos(w * t);
+  out.omegaY = 0.08 * wy * Math.cos(wy * t);
+}
+
+function spinMaster(t, out) {
+  const w = (Math.PI * 2) / SPIN_DURATION;
+  const phi = w * t;
+  out.thetaX = 0.035 * Math.sin(2 * phi);
+  out.thetaZ = 0.035 * Math.cos(2 * phi);
+  out.thetaY = phi;
+  out.omegaX = 0.035 * 2 * w * Math.cos(2 * phi);
+  out.omegaZ = -0.035 * 2 * w * Math.sin(2 * phi);
+  out.omegaY = w;
+}
+
+const CLIPS = {
+  swing: { name: 'Mocha_Swing', duration: SWING_DURATION, master: swingMaster },
+  spin: { name: 'Mocha_Spin_360', duration: SPIN_DURATION, master: spinMaster },
+};
+
+const FIELDS = ['thetaX', 'thetaZ', 'thetaY', 'charmX', 'charmZ'];
+const MASTER_FIELDS = ['thetaX', 'thetaZ', 'thetaY'];
 
 /**
- * Bakes a coordinated natural pendulum swinging loop.
- * Loop duration: 3.2s (2 complete swing cycles for seamless periodic continuity).
+ * Runs the same pendulum equations as the live view (same chain lengths, same
+ * charm sizes) under the scripted master motion, warms up to the periodic steady
+ * state and records one loop. Returns per-frame master and branch angles.
  */
-export function bakeSwingAnimation(cluster) {
-  const duration = 3.2;
-  const fps = 30;
-  const totalFrames = Math.round(duration * fps);
-  const times = [];
-  for (let f = 0; f <= totalFrames; f++) {
-    times.push(f / fps);
+export function simulateLoop(cluster, kind) {
+  const clip = CLIPS[kind];
+  const frames = Math.round(clip.duration * FPS);
+  const master = createMasterState();
+  const states = cluster.branches.map((b) => ({ ...createBranchState(), ...b.restSim }));
+  const items = cluster.branches.map((b, i) => ({ sim: states[i], slot: slotFor(i), lengths: b.lengths, geom: b.geom }));
+
+  const advanceTo = (from, to) => {
+    for (let t = from; t < to - 1e-9; t += SIM_DT) {
+      clip.master(t + SIM_DT, master);
+      stepItems(master, items, cluster.spread, SIM_DT);
+    }
+  };
+
+  // Warm up on whole periods so frame 0 is already in steady state.
+  advanceTo(0, clip.duration * WARMUP_PERIODS);
+
+  const record = [];
+  for (let k = 0; k <= frames; k++) {
+    const t = k / FPS;
+    if (k > 0) advanceTo((k - 1) / FPS, t);
+    clip.master(t, master);
+    record.push({
+      master: Object.fromEntries(MASTER_FIELDS.map((f) => [f, master[f]])),
+      branches: states.map((s) => Object.fromEntries(FIELDS.map((f) => [f, s[f]]))),
+    });
   }
 
-  const freq = (Math.PI * 2 * 2) / duration;
-  const yawFreq = (Math.PI * 2 * 1) / duration;
+  // Blend the tail back onto the first frame for a seamless loop.
+  const first = record[0];
+  for (let k = frames - CLOSE_FRAMES + 1; k <= frames; k++) {
+    const w = (k - (frames - CLOSE_FRAMES)) / CLOSE_FRAMES;
+    const s = w * w * (3 - 2 * w);
+    const frame = record[k];
+    frame.branches.forEach((b, i) => FIELDS.forEach((f) => (b[f] += (first.branches[i][f] - b[f]) * s)));
+    // The scripted master already loops; keep its last frame exactly equal to the first.
+    if (k === frames) MASTER_FIELDS.forEach((f) => (frame.master[f] = first.master[f]));
+  }
+
+  // The blend above can nudge charms into each other, so every frame gets a final
+  // position-only pass: the exported clip never has two charms overlapping.
+  const scratch = states.map((s) => ({ ...s }));
+  const scratchItems = items.map((item, i) => ({ ...item, sim: scratch[i] }));
+  const scratchMaster = createMasterState();
+  for (const frame of record) {
+    Object.assign(scratchMaster, frame.master);
+    frame.branches.forEach((b, i) => Object.assign(scratch[i], b));
+    for (let pass = 0; pass < 6; pass++) {
+      resolveContacts(scratchMaster, scratchItems, cluster.spread, { velocity: false, bias: 1, iterations: 6 });
+    }
+    frame.branches.forEach((b, i) => FIELDS.forEach((f) => (b[f] = scratch[i][f])));
+  }
+
+  return { clip, frames, record };
+}
+
+export function bakeAnimation(cluster, kind) {
+  const { clip, frames, record } = simulateLoop(cluster, kind);
+  const times = Array.from({ length: frames + 1 }, (_, k) => k / FPS);
   const tracks = [];
+  const q = new THREE.Quaternion();
+  const v = new THREE.Vector3();
 
-  // 1. Master Split Ring Motion
-  const masterQuats = [];
-  const _eMaster = new THREE.Euler();
-  const _qMaster = new THREE.Quaternion();
+  const ringQuats = [];
+  const ringPos = [];
+  record.forEach(({ master }) => {
+    const qm = masterQuaternion(master, new THREE.Quaternion());
+    ringQuats.push(qm.x, qm.y, qm.z, qm.w);
+    ringPosition(qm, v);
+    ringPos.push(v.x, v.y, v.z);
+  });
+  tracks.push(new THREE.VectorKeyframeTrack('MasterSplitRing.position', times, ringPos));
+  tracks.push(new THREE.QuaternionKeyframeTrack('MasterSplitRing.quaternion', times, ringQuats));
 
-  for (let f = 0; f <= totalFrames; f++) {
-    const t = times[f];
-    const thetaX = 0.09 * Math.cos(freq * t);
-    const thetaZ = 0.13 * Math.sin(freq * t);
-    const thetaY = 0.08 * Math.sin(yawFreq * t);
-
-    _eMaster.set(thetaX, thetaY, thetaZ, 'YXZ');
-    _qMaster.setFromEuler(_eMaster);
-    masterQuats.push(_qMaster.x, _qMaster.y, _qMaster.z, _qMaster.w);
-  }
-  tracks.push(new THREE.QuaternionKeyframeTrack('MasterSplitRing.quaternion', times, masterQuats));
-
-  // 2. Animate Each Fanned Charm Branch
-  const spread = CONFIG.clusterSpread;
-  const CLUSTER_SLOTS = getClusterSlots();
-
-  cluster.branches.forEach((b, bIdx) => {
-    const slot = CLUSTER_SLOTS[bIdx % CLUSTER_SLOTS.length];
-    const branchPositions = [];
-    const branchQuats = [];
-    const nodeName = `CharmBranch_${b.index}`;
-
-    for (let f = 0; f <= totalFrames; f++) {
-      const t = times[f];
-      const thetaX = 0.09 * Math.cos(freq * t);
-      const thetaZ = 0.13 * Math.sin(freq * t);
-      const thetaY = 0.08 * Math.sin(yawFreq * t);
-
-      _eMaster.set(thetaX, thetaY, thetaZ, 'YXZ');
-      _qMaster.setFromEuler(_eMaster);
-
-      const ringPos = slot.ringOffset.clone();
-      ringPos.x *= spread;
-      ringPos.applyQuaternion(_qMaster);
-      branchPositions.push(ringPos.x, ringPos.y, ringPos.z);
-
-      const phaseLag = 0.35 + bIdx * 0.40;
-      const secondarySwayX = 0.045 * Math.sin(freq * t - phaseLag);
-      const secondarySwayZ = 0.045 * Math.cos(freq * t - phaseLag);
-
-      const totalYaw = thetaY + slot.restYaw;
-      const totalPitch = (thetaX * 0.75) + slot.restPitch + secondarySwayX;
-      const totalRoll = (thetaZ * 0.75) + slot.restRoll + secondarySwayZ;
-
-      const _eBranch = new THREE.Euler(totalPitch, totalYaw, totalRoll, 'YXZ');
-      const _qBranch = new THREE.Quaternion().setFromEuler(_eBranch);
-      branchQuats.push(_qBranch.x, _qBranch.y, _qBranch.z, _qBranch.w);
-    }
-
-    tracks.push(new THREE.VectorKeyframeTrack(`${nodeName}.position`, times, branchPositions));
-    tracks.push(new THREE.QuaternionKeyframeTrack(`${nodeName}.quaternion`, times, branchQuats));
+  cluster.branches.forEach((b, i) => {
+    const slot = slotFor(i);
+    const pos = [];
+    const quats = [];
+    const pivotQuats = [];
+    record.forEach(({ master, branches }) => {
+      const qm = masterQuaternion(master, new THREE.Quaternion());
+      branchPosition(qm, slot, cluster.spread, v);
+      pos.push(v.x, v.y, v.z);
+      branchQuaternion(master, branches[i], slot, q);
+      quats.push(q.x, q.y, q.z, q.w);
+      pivotQuaternion(branches[i], q);
+      pivotQuats.push(q.x, q.y, q.z, q.w);
+    });
+    tracks.push(new THREE.VectorKeyframeTrack(`CharmBranch_${b.index}.position`, times, pos));
+    tracks.push(new THREE.QuaternionKeyframeTrack(`CharmBranch_${b.index}.quaternion`, times, quats));
+    tracks.push(new THREE.QuaternionKeyframeTrack(`CharmPivot_${b.index}.quaternion`, times, pivotQuats));
   });
 
-  return new THREE.AnimationClip('Mocha_Swing_Physics', duration, tracks);
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
+}
+
+function getClips(cluster, animType) {
+  if (animType === 'both') return [bakeAnimation(cluster, 'swing'), bakeAnimation(cluster, 'spin')];
+  return [bakeAnimation(cluster, animType === 'spin' ? 'spin' : 'swing')];
+}
+
+// ------------------------------------------------------------ export scene
+
+/** Exports never carry the viewport's hover/selection tint. */
+function stripHighlight(node) {
+  node.traverse((obj) => {
+    if (!obj.isMesh || !obj.material?.emissive || obj.material.emissive.getHex() === 0) return;
+    obj.material = obj.material.clone();
+    obj.material.emissive.setHex(0x000000);
+    obj.material.emissiveIntensity = 1;
+  });
 }
 
 /**
- * Bakes a continuous 360° showcase turntable rotation loop.
- * Loop duration: 3.6s (complete 360° spin with subtle centrifugal charm fanning).
+ * Builds the export hierarchy. `live` copies the current interactive pose; otherwise
+ * the cluster is posed at rest (so animation clips start from a clean pose).
+ * `unitScale` converts scene units (OBJ: millimetres, glTF: metres).
  */
-export function bakeSpinAnimation(cluster) {
-  const duration = 3.6;
-  const fps = 30;
-  const totalFrames = Math.round(duration * fps);
-  const times = [];
-  for (let f = 0; f <= totalFrames; f++) {
-    times.push(f / fps);
-  }
+export function prepareClusterExportRoot(cluster, { live = false, unitScale = 1 } = {}) {
+  const root = new THREE.Group();
+  root.name = 'Mocha_KeychainCluster';
+  root.scale.setScalar(unitScale);
 
-  const tracks = [];
-  const masterQuats = [];
-  const _eMaster = new THREE.Euler();
-  const _qMaster = new THREE.Quaternion();
+  const master = live ? cluster.sim : createMasterState();
+  const qm = masterQuaternion(master, new THREE.Quaternion());
 
-  for (let f = 0; f <= totalFrames; f++) {
-    const t = times[f];
-    const phi = (t / duration) * Math.PI * 2; // Complete 0 to 2pi rotation
-    const wobbleX = 0.035 * Math.sin(phi * 2);
-    const wobbleZ = 0.035 * Math.cos(phi * 2);
+  const ring = cluster.ringMesh.clone(false);
+  ring.name = 'MasterSplitRing';
+  ring.position.copy(ringPosition(qm, new THREE.Vector3()));
+  ring.quaternion.copy(qm);
+  root.add(ring);
 
-    _eMaster.set(wobbleX, phi, wobbleZ, 'YXZ');
-    _qMaster.setFromEuler(_eMaster);
-    masterQuats.push(_qMaster.x, _qMaster.y, _qMaster.z, _qMaster.w);
-  }
-  tracks.push(new THREE.QuaternionKeyframeTrack('MasterSplitRing.quaternion', times, masterQuats));
+  cluster.branches.forEach((b, i) => {
+    const slot = slotFor(i);
+    const bs = live ? b.sim : b.restSim;
 
-  const spread = CONFIG.clusterSpread;
-  const CLUSTER_SLOTS = getClusterSlots();
+    const group = new THREE.Group();
+    group.name = `CharmBranch_${b.index}`;
+    group.position.copy(branchPosition(qm, slot, cluster.spread, new THREE.Vector3()));
+    group.quaternion.copy(branchQuaternion(master, bs, slot, new THREE.Quaternion()));
+    group.add(b.hardwareGroup.clone(true));
 
-  cluster.branches.forEach((b, bIdx) => {
-    const slot = CLUSTER_SLOTS[bIdx % CLUSTER_SLOTS.length];
-    const branchPositions = [];
-    const branchQuats = [];
-    const nodeName = `CharmBranch_${b.index}`;
+    const pivot = new THREE.Group();
+    pivot.name = `CharmPivot_${b.index}`;
+    pivot.position.copy(b.charmPivot.position);
+    pivot.quaternion.copy(pivotQuaternion(bs, new THREE.Quaternion()));
+    pivot.add(b.charmGroup.clone(true));
+    stripHighlight(pivot);
+    group.add(pivot);
 
-    for (let f = 0; f <= totalFrames; f++) {
-      const t = times[f];
-      const phi = (t / duration) * Math.PI * 2;
-      const wobbleX = 0.035 * Math.sin(phi * 2);
-      const wobbleZ = 0.035 * Math.cos(phi * 2);
-
-      _eMaster.set(wobbleX, phi, wobbleZ, 'YXZ');
-      _qMaster.setFromEuler(_eMaster);
-
-      const ringPos = slot.ringOffset.clone();
-      ringPos.x *= spread;
-      ringPos.applyQuaternion(_qMaster);
-      branchPositions.push(ringPos.x, ringPos.y, ringPos.z);
-
-      // Centrifugal inertia gently pushes charms outward during 360° rotation
-      const totalYaw = phi + slot.restYaw;
-      const centrifugalFlare = 0.055;
-      const totalPitch = (wobbleX * 0.5) + slot.restPitch;
-      const totalRoll = (wobbleZ * 0.5) + slot.restRoll + centrifugalFlare;
-
-      const _eBranch = new THREE.Euler(totalPitch, totalYaw, totalRoll, 'YXZ');
-      const _qBranch = new THREE.Quaternion().setFromEuler(_eBranch);
-      branchQuats.push(_qBranch.x, _qBranch.y, _qBranch.z, _qBranch.w);
-    }
-
-    tracks.push(new THREE.VectorKeyframeTrack(`${nodeName}.position`, times, branchPositions));
-    tracks.push(new THREE.QuaternionKeyframeTrack(`${nodeName}.quaternion`, times, branchQuats));
+    root.add(group);
   });
 
-  return new THREE.AnimationClip('Mocha_Spin_360', duration, tracks);
+  root.updateMatrixWorld(true);
+  return root;
 }
 
-/**
- * Prepares the export hierarchy.
- * When useLivePose is true, captures the exact interactive 3D pose from the active viewport.
- */
-export function prepareClusterExportRoot(cluster, useLivePose = false) {
-  const exportRoot = new THREE.Group();
-  exportRoot.name = "Mocha_KeychainCluster";
+// ------------------------------------------------------------------ exports
 
-  // 1. Master Split Ring
-  const splitClone = cluster.masterSplitRingMesh.clone();
-  splitClone.name = "MasterSplitRing";
-  if (useLivePose) {
-    splitClone.position.copy(cluster.masterSplitRingMesh.position);
-    splitClone.quaternion.copy(cluster.masterSplitRingMesh.quaternion);
-  } else {
-    splitClone.position.set(0, 0, 0);
-    splitClone.quaternion.set(0, 0, 0, 1);
-  }
-  exportRoot.add(splitClone);
+const stamp = () => Date.now();
 
-  const spread = CONFIG.clusterSpread;
-  const CLUSTER_SLOTS = getClusterSlots();
-
-  // 2. Charm Branches with clean, standards-compliant ASCII node names
-  cluster.branches.forEach((b, bIdx) => {
-    const slot = CLUSTER_SLOTS[bIdx % CLUSTER_SLOTS.length];
-    const branchGroup = new THREE.Group();
-    branchGroup.name = `CharmBranch_${b.index}`;
-
-    if (useLivePose) {
-      branchGroup.position.copy(b.branchGroup.position);
-      branchGroup.quaternion.copy(b.branchGroup.quaternion);
-    } else {
-      const ringPos = slot.ringOffset.clone();
-      ringPos.x *= spread;
-      branchGroup.position.copy(ringPos);
-
-      const _eRest = new THREE.Euler(slot.restPitch, slot.restYaw, slot.restRoll, 'YXZ');
-      branchGroup.quaternion.setFromEuler(_eRest);
-    }
-
-    const hwClone = b.hardwareGroup.clone(true);
-    branchGroup.add(hwClone);
-
-    if (b.charmGroup) {
-      const charmClone = b.charmGroup.clone(true);
-      branchGroup.add(charmClone);
-    }
-
-    exportRoot.add(branchGroup);
+function parseGLTF(root, clips, binary) {
+  return new Promise((resolve, reject) => {
+    new GLTFExporter().parse(root, resolve, reject, { binary, animations: clips });
   });
-
-  // Ensure all scene graph matrices and bounding boxes are computed before exporting
-  exportRoot.updateMatrixWorld(true);
-  return exportRoot;
 }
 
-/**
- * Resolves the animation clip(s) to embed based on user selection:
- * 'swing' | 'spin' | 'both'
- */
-function getSelectedClips(masterCluster, animType) {
-  if (animType === 'spin') {
-    return [bakeSpinAnimation(masterCluster)];
-  } else if (animType === 'both') {
-    return [bakeSwingAnimation(masterCluster), bakeSpinAnimation(masterCluster)];
+export async function exportGLB(cluster, onToast, animType = 'swing') {
+  if (!cluster) return;
+  const label = ANIMATION_LABELS[animType] ?? ANIMATION_LABELS.swing;
+  onToast(`PACKING .GLB (${label})...`);
+  try {
+    const root = prepareClusterExportRoot(cluster, { unitScale: MM_PER_UNIT / 1000 });
+    const result = await parseGLTF(root, getClips(cluster, animType), true);
+    if (!(result instanceof ArrayBuffer)) throw new Error('GLTFExporter did not return a binary buffer');
+    downloadBlob(new Blob([result], { type: 'model/gltf-binary' }), `mocha_keychain_${animType}_${stamp()}.glb`);
+    onToast(`EXPORTED .GLB (${label})`);
+  } catch (err) {
+    console.error(err);
+    onToast('GLB EXPORT FAILED');
   }
-  return [bakeSwingAnimation(masterCluster)];
 }
 
-export function exportGLB(masterCluster, showToast, animType = 'swing') {
-  if (!masterCluster) return;
-  const animLabel = animType === 'spin' ? 'SPIN 360°' : animType === 'both' ? 'SWING + SPIN' : 'SWING';
-  showToast(`PACKING .GLB (${animLabel} ANIMATED)...`);
-
-  const exportRoot = prepareClusterExportRoot(masterCluster, false);
-  const animClips = getSelectedClips(masterCluster, animType);
-
-  const exporter = new GLTFExporter();
-  exporter.parse(
-    exportRoot,
-    (result) => {
-      if (result instanceof ArrayBuffer) {
-        const blob = new Blob([result], { type: 'model/gltf-binary' });
-        downloadBlob(blob, `mocha_keychain_${animType}_${Date.now()}.glb`);
-        showToast(`EXPORTED .GLB (${animLabel} ANIMATED)`);
-      }
-    },
-    (err) => {
-      console.error(err);
-      showToast('GLB EXPORT FAILED');
-    },
-    {
-      binary: true,
-      animations: animClips,
-      embedImages: true
-    }
-  );
+export async function exportGLTF(cluster, onToast, animType = 'swing') {
+  if (!cluster) return;
+  const label = ANIMATION_LABELS[animType] ?? ANIMATION_LABELS.swing;
+  onToast(`PACKING .GLTF (${label})...`);
+  try {
+    const root = prepareClusterExportRoot(cluster, { unitScale: MM_PER_UNIT / 1000 });
+    const result = await parseGLTF(root, getClips(cluster, animType), false);
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, `mocha_keychain_${animType}_${stamp()}.gltf`);
+    onToast(`EXPORTED .GLTF (${label})`);
+  } catch (err) {
+    console.error(err);
+    onToast('GLTF EXPORT FAILED');
+  }
 }
 
-export function exportGLTF(masterCluster, showToast, animType = 'swing') {
-  if (!masterCluster) return;
-  const animLabel = animType === 'spin' ? 'SPIN 360°' : animType === 'both' ? 'SWING + SPIN' : 'SWING';
-  showToast(`PACKING .GLTF (${animLabel} ANIMATED)...`);
-
-  const exportRoot = prepareClusterExportRoot(masterCluster, false);
-  const animClips = getSelectedClips(masterCluster, animType);
-
-  const exporter = new GLTFExporter();
-  exporter.parse(
-    exportRoot,
-    (result) => {
-      const output = JSON.stringify(result, null, 2);
-      const blob = new Blob([output], { type: 'application/json' });
-      downloadBlob(blob, `mocha_keychain_${animType}_${Date.now()}.gltf`);
-      showToast(`EXPORTED .GLTF (${animLabel} ANIMATED)`);
-    },
-    (err) => {
-      console.error(err);
-      showToast('GLTF EXPORT FAILED');
-    },
-    {
-      binary: false,
-      animations: animClips,
-      embedImages: true
-    }
-  );
-}
-
-export function exportOBJ(masterCluster, showToast) {
-  if (!masterCluster) return;
-  showToast('PACKING .OBJ (CURRENT 3D POSE)...');
-
-  // Captures current live interactive 3D pose (WYSIWYG)
-  const exportRoot = prepareClusterExportRoot(masterCluster, true);
-  const exporter = new OBJExporter();
-  const result = exporter.parse(exportRoot);
-  const blob = new Blob([result], { type: 'text/plain' });
-  downloadBlob(blob, `mocha_keychain_static_${Date.now()}.obj`);
-  showToast('SAVED .OBJ (STATIC 3D GEOMETRY)');
-}
-
-export function captureSnapshot(renderer, scene, camera, showToast) {
-  renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL('image/png');
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `mocha_snapshot_${Date.now()}.png`;
-  link.click();
-  showToast('SNAPSHOT SAVED');
+/** Static geometry of the current pose, in millimetres. */
+export function exportOBJ(cluster, onToast) {
+  if (!cluster) return;
+  onToast('PACKING .OBJ (CURRENT POSE, MM)...');
+  try {
+    const root = prepareClusterExportRoot(cluster, { live: true, unitScale: MM_PER_UNIT });
+    const result = new OBJExporter().parse(root);
+    downloadBlob(new Blob([result], { type: 'text/plain' }), `mocha_keychain_static_${stamp()}.obj`);
+    onToast('SAVED .OBJ (MILLIMETRES)');
+  } catch (err) {
+    console.error(err);
+    onToast('OBJ EXPORT FAILED');
+  }
 }

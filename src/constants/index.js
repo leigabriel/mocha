@@ -1,31 +1,64 @@
-export const CONFIG = {
-  bgMode: 'light',
+// All dimensions are in scene units. 1 unit = MM_PER_UNIT millimetres, so one
+// voxel (0.042 units) is 1.5 mm and a 17-voxel charm is about 25 mm across.
+export const MM_PER_UNIT = 1.5 / 0.042;
+
+export const MAX_CHARMS = 5;
+export const MIN_LINKS = 4;
+export const MAX_LINKS = 10;
+export const SPREAD_MIN = 0.75;
+export const SPREAD_MAX = 1.35;
+
+// Real-world molded thickness (mm) for each thickness mode.
+export const THICKNESS_MM = { 1: 3.0, 2: 4.5, 3: 6.0 };
+
+export const CONFIG = Object.freeze({
   scaleVoxel: 0.042,
 
-  // Master Top Split Ring (Shared anchor for all cluster charms)
-  masterRingRadius: 0.165,
-  masterRingWire: 0.013,
+  // Master split ring (shared anchor for every charm)
+  masterRingRadius: 0.30,
+  masterRingWire: 0.02,
 
-  // Short Hardware Dimensions
-  jumpRingRadius: 0.034,
-  jumpRingWire: 0.0075,
+  // Wall peg the master ring hangs from (the pendulum pivot sits on the peg)
+  pegRadius: 0.014,
+
+  // Jump rings
+  jumpRingRadius: 0.0544,
+  jumpRingWire: 0.012,
+
+  // Charm lug
   lugHoleRadius: 0.024,
   lugWall: 0.026,
 
-  // Stadium Cable Link Dimensions (Interlocking 90° twists)
-  linkOuterL: 0.052,
-  linkOuterW: 0.034,
-  linkWireR: 0.0065,
-  linkPitch: 0.035, // Distance between adjacent link pivots
-
-  clusterSpread: 1.0,
-};
+  // Stadium chain links
+  linkOuterL: 0.0832,
+  linkOuterW: 0.0544,
+  linkWireR: 0.0104,
+  linkPitch: 0.056,
+});
 
 export const HARDWARE_MATS = {
   steel: { color: 0xe0e5ec, metalness: 0.96, roughness: 0.18 },
-  gold:  { color: 0xdfb445, metalness: 0.93, roughness: 0.22 },
-  noir:  { color: 0x22242b, metalness: 0.90, roughness: 0.28 }
+  gold: { color: 0xdfb445, metalness: 0.93, roughness: 0.22 },
+  noir: { color: 0x454a57, metalness: 0.88, roughness: 0.32 },
 };
+
+export const FINISHES = ['steel', 'gold', 'noir'];
+
+export const SCENE_BG = {
+  light: { hex: 0xebebeb, css: '#EBEBEB' },
+  dark: { hex: 0x212121, css: '#212121' },
+};
+
+// Lighting presets (an environment map supplies most of the metal reflections).
+export const LIGHTING = {
+  light: { ambient: 0.35, key: 1.7, rim: 1.1, env: 0.95 },
+  dark: { ambient: 0.25, key: 1.9, rim: 1.7, env: 0.6 },
+};
+
+export const ADD_POOL = ['💎', '⭐', '🍕', '🎮', '🚀', '🦄', '🕹️', '⚡', '👑', '🌈'];
+export const SURPRISE_POOL = ['🥷', '❤️‍🔥', '🛸', '🪐', '🦄', '🕹️', '🐉', '🍄', '🧿', '👑', '🧸', '🍦', '🏴‍☠️'];
+
+export const CATEGORIES = ['all', 'faces', 'animals', 'food', 'objects', 'symbols'];
 
 export const EMOJI_DATABASE = [
   // FACES & SMILEYS
@@ -93,11 +126,11 @@ export const EMOJI_DATABASE = [
   // SYMBOLS & HEARTS
   { char: '⭐', cat: 'symbols', tags: 'star yellow rating favorite' },
   { char: '🌟', cat: 'symbols', tags: 'glowing star bright sparkle' },
-  { char: '❤', cat: 'symbols', tags: 'red heart love romance' },
+  { char: '❤️', cat: 'symbols', tags: 'red heart love romance' },
   { char: '💖', cat: 'symbols', tags: 'sparkling heart love romance shiny' },
   { char: '💯', cat: 'symbols', tags: 'hundred score 100 percent perfect' },
   { char: '👑', cat: 'symbols', tags: 'crown king queen royal gold' },
   { char: '🍀', cat: 'symbols', tags: 'four leaf clover lucky irish green' },
   { char: '🪐', cat: 'symbols', tags: 'saturn planet ring cosmos space' },
-  { char: '☀️', cat: 'symbols', tags: 'sun bright daylight sunny weather' }
+  { char: '☀️', cat: 'symbols', tags: 'sun bright daylight sunny weather' },
 ];

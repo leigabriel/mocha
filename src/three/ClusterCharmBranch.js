@@ -1,95 +1,201 @@
 import * as THREE from 'three';
 import { CONFIG } from '../constants/index.js';
-import { buildVoxelCharmMesh, createJumpRingMesh, createStadiumLinkMesh } from './meshBuilders.js';
+import { acquireCharm } from './meshBuilders.js';
+import { createJumpRingMesh, createStadiumLinkMesh, markHardware } from './hardware.js';
+import { createBranchState } from './physics.js';
+
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+// Hover / selection feedback is a soft emissive tint on the charm itself (no wireframe
+// box), so nothing extra is ever drawn around a charm or ends up in an export.
+const HIGHLIGHT = {
+  hover: { color: 0xff9f1c, intensity: 0.32 },
+  selected: { color: 0x3b6bff, intensity: 0.4 },
+};
+// Collision boxes are padded a hair so touching charms keep a visible gap.
+const COLLISION_PAD = 0.0015;
+const pickMat = new THREE.MeshBasicMaterial({ visible: false });
+
+/**
+ * Rotation about the chain axis for element `i` (0 = top ring, 1..n = links,
+ * n + 1 = bottom ring). The twist is spread evenly so neighbours always interlock
+ * at (close to) 90 degrees and the bottom ring ends up in the YZ plane, the plane
+ * that threads through the charm lug's hole, for every link count.
+ */
+export function chainElementAngle(elementIndex, linkCount) {
+  const steps = linkCount + 1;
+  const k = Math.round(steps / 2);
+  const step = (Math.PI * k) / steps;
+  return Math.PI / 2 + step * elementIndex;
+}
 
 export class ClusterCharmBranch {
   constructor(index, emoji = '👾', thickness = 2, chainLinks = 4) {
     this.index = index;
     this.emoji = emoji;
     this.thickness = thickness;
-    this.chainLinks = chainLinks; // Configurable 4 to 10 links
+    this.chainLinks = chainLinks;
 
     this.branchGroup = new THREE.Group();
-    this.branchGroup.name = `CharmBranch_${index}_${emoji}`;
-
     this.hardwareGroup = new THREE.Group();
     this.hardwareGroup.name = `Hardware_${index}`;
     this.branchGroup.add(this.hardwareGroup);
 
+    this.charmPivot = new THREE.Group();
     this.charmGroup = null;
+    this.highlightMode = 'none';
+    this.ownMaterials = [];
+    this.geom = null;
+    this.charmData = null;
+    this.pickMeshes = [];
 
-    // Independent Physical Pendulum State for this specific charm
-    this.thetaX = 0;
-    this.thetaZ = 0;
-    this.thetaY = 0;
-    this.omegaX = 0;
-    this.omegaZ = 0;
-    this.omegaY = 0;
-
-    // World centroid tracking for collision repulsion
+    this.sim = createBranchState();
+    this.lengths = { pivot: 0.5, charm: 0.25 };
     this.worldCentroid = new THREE.Vector3();
+    this.restSim = createBranchState(); // settled, overlap-free rest pose
+    this.monochrome = false;
+
+    this.rename(index);
+  }
+
+  rename(index) {
+    this.index = index;
+    this.branchGroup.name = `CharmBranch_${index}`;
+    this.hardwareGroup.name = `Hardware_${index}`;
+    this.charmPivot.name = `CharmPivot_${index}`;
+    if (this.charmGroup) this.charmGroup.name = `ClusterCharm_${index}`;
+  }
+
+  clear() {
+    for (const child of [...this.hardwareGroup.children]) this.hardwareGroup.remove(child);
+    for (const pick of this.pickMeshes) {
+      pick.parent?.remove(pick);
+      pick.geometry.dispose();
+    }
+    this.pickMeshes = [];
+    for (const mat of this.ownMaterials) mat.dispose();
+    this.ownMaterials = [];
+    this.geom = null;
+    if (this.charmGroup) {
+      this.charmPivot.remove(this.charmGroup);
+      this.charmGroup = null;
+    }
+    this.branchGroup.remove(this.charmPivot);
+    if (this.charmData) {
+      this.charmData.release();
+      this.charmData = null;
+    }
   }
 
   build(hwMaterial) {
-    while (this.hardwareGroup.children.length > 0) {
-      this.hardwareGroup.remove(this.hardwareGroup.children[0]);
-    }
-    if (this.charmGroup) {
-      this.branchGroup.remove(this.charmGroup);
-      this.charmGroup = null;
-    }
+    const highlight = this.highlightMode;
+    this.clear();
+    const n = this.chainLinks;
+    const Rj = CONFIG.jumpRingRadius;
 
-    const _qTwist = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, -1, 0), Math.PI / 2);
-
-    // 1. Top Mini Jump Ring (Passes directly over shared split ring wire)
-    const topRing = createJumpRingMesh(hwMaterial);
+    // 1. Top jump ring (hangs on the master ring wire)
+    const topRing = markHardware(createJumpRingMesh(hwMaterial));
     topRing.name = `TopRing_${this.index}`;
-    topRing.position.set(0, 0, 0);
-    topRing.quaternion.copy(_qTwist);
+    topRing.quaternion.setFromAxisAngle(Y_AXIS, chainElementAngle(0, n));
     this.hardwareGroup.add(topRing);
 
-    // 2. Interlocking Cable Chain Links (4 to 10 links)
-    let dropY = -CONFIG.jumpRingRadius * 0.95;
-    for (let i = 0; i < this.chainLinks; i++) {
-      const link = createStadiumLinkMesh(hwMaterial);
+    // 2. Interlocking chain links
+    const topY = -Rj * 0.95;
+    for (let i = 0; i < n; i++) {
+      const link = markHardware(createStadiumLinkMesh(hwMaterial));
       link.name = `ChainLink_${this.index}_${i}`;
-      link.position.set(0, dropY - (i + 0.5) * CONFIG.linkPitch, 0);
-      
-      // Alternate 90 degrees on every link for true mechanical interlocking
-      if (i % 2 === 1) {
-        link.quaternion.copy(_qTwist);
-      }
+      link.position.set(0, topY - (i + 0.5) * CONFIG.linkPitch, 0);
+      link.quaternion.setFromAxisAngle(Y_AXIS, chainElementAngle(i + 1, n));
       this.hardwareGroup.add(link);
     }
 
-    dropY -= (this.chainLinks * CONFIG.linkPitch + CONFIG.jumpRingRadius * 0.2);
-
-    // 3. Bottom Charm Jump Ring (Loops through molded lug)
-    const botRing = createJumpRingMesh(hwMaterial);
+    // 3. Bottom jump ring (threads through the lug hole)
+    const botY = topY - n * CONFIG.linkPitch - Rj * 0.2;
+    const botRing = markHardware(createJumpRingMesh(hwMaterial));
     botRing.name = `BotRing_${this.index}`;
-    botRing.position.set(0, dropY, 0);
-    if (this.chainLinks % 2 === 0) {
-      botRing.quaternion.copy(_qTwist);
-    }
+    botRing.position.set(0, botY, 0);
+    botRing.quaternion.setFromAxisAngle(Y_AXIS, chainElementAngle(n + 1, n));
     this.hardwareGroup.add(botRing);
 
-    dropY -= (CONFIG.jumpRingRadius * 1.25);
+    // 4. Charm: pivots about the bottom ring, lug hole 1.25 ring radii below it
+    const charm = acquireCharm(this.emoji, this.thickness);
+    this.charmData = charm;
+    this.monochrome = charm.monochrome;
 
-    // 4. Solid Voxel Charm Body & Lug (100% Solid & Fully Opaque)
-    const charmData = buildVoxelCharmMesh(this.emoji, this.thickness);
+    this.charmPivot.position.set(0, botY, 0);
     this.charmGroup = new THREE.Group();
     this.charmGroup.name = `ClusterCharm_${this.index}`;
+    this.charmGroup.position.set(0, -Rj * 1.25, 0);
+    charm.characterMesh.position.set(-charm.lugOffset.x, -charm.lugOffset.y, -charm.lugOffset.z);
+    charm.lugMesh.position.set(0, 0, 0);
+    this.charmGroup.add(charm.lugMesh, charm.characterMesh);
+    this.charmPivot.add(this.charmGroup);
+    this.branchGroup.add(this.charmPivot);
 
-    charmData.lugMesh.position.set(0, 0, 0);
-    charmData.characterMesh.position.set(
-      -charmData.lugOffset.x,
-      -charmData.lugOffset.y,
-      -charmData.lugOffset.z
-    );
+    // Each branch owns its charm materials so the highlight tint stays on one charm.
+    const plastic = charm.characterMesh.material.clone();
+    const lugMat = charm.lugMesh.material.clone();
+    charm.characterMesh.material = plastic;
+    charm.lugMesh.material = lugMat;
+    this.ownMaterials = [plastic, lugMat];
 
-    this.charmGroup.add(charmData.lugMesh);
-    this.charmGroup.add(charmData.characterMesh);
-    this.charmGroup.position.set(0, dropY, 0);
-    this.branchGroup.add(this.charmGroup);
+    // Generous invisible pick volume (never rendered or exported)
+    const pad = 0.012;
+    const box = new THREE.BoxGeometry(charm.size.x + pad, charm.size.y + pad, charm.size.z + pad);
+    const charmPick = new THREE.Mesh(box, pickMat);
+    charmPick.position.set(this.charmGroup.position.x - charm.lugOffset.x, this.charmGroup.position.y - charm.lugOffset.y, 0);
+    this.addPick(charmPick, this.charmPivot);
+
+    // Rigid body used for charm-vs-charm collision, in the branch frame.
+    this.geom = {
+      botY,
+      drop: -Rj * 1.25,
+      lug: charm.lugOffset.clone(),
+      half: [
+        charm.size.x / 2 + COLLISION_PAD,
+        charm.size.y / 2 + COLLISION_PAD,
+        charm.size.z / 2 + COLLISION_PAD,
+      ],
+    };
+
+    const chainLength = -botY + Rj;
+    const chainPick = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, chainLength, 8), pickMat);
+    chainPick.position.set(0, -chainLength / 2 + Rj, 0);
+    this.addPick(chainPick, this.branchGroup);
+
+    this.setHighlight(highlight);
+
+    // Pendulum lengths follow the real chain and charm size, so longer chains swing slower.
+    const charmArm = Rj * 1.25 + charm.lugOffset.y;
+    this.lengths = { pivot: -botY + charmArm * 0.5, charm: Math.max(0.1, charmArm * 0.6) };
+    return charm;
+  }
+
+  addPick(mesh, parent) {
+    mesh.userData.pick = true;
+    mesh.userData.branch = this;
+    mesh.name = `Pick_${this.index}`;
+    parent.add(mesh);
+    this.pickMeshes.push(mesh);
+  }
+
+  /** mode: 'none' | 'hover' | 'selected' */
+  setHighlight(mode) {
+    this.highlightMode = mode;
+    const h = HIGHLIGHT[mode];
+    for (const mat of this.ownMaterials) {
+      if (h) {
+        mat.emissive.setHex(h.color);
+        mat.emissiveIntensity = h.intensity;
+      } else {
+        mat.emissive.setHex(0x000000);
+        mat.emissiveIntensity = 1;
+      }
+    }
+  }
+
+  dispose() {
+    this.clear();
+    this.branchGroup.parent?.remove(this.branchGroup);
   }
 }

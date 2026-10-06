@@ -21,7 +21,7 @@ Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji
 ### Key Highlights:
 - **Instant Voxelization**: Rasterizes and extrudes any emoji into solid, colorful 3D pixel geometry.
 - **Multi-Charm Cluster**: Attach up to 5 individual charms on a single master split ring.
-- **Physical Dynamics**: Interactive natural pendulum swing, 360° spin inertia, and soft collision repulsion.
+- **Physical Dynamics**: Fixed-timestep pendulum physics (identical at 30 and 144 Hz) where chain length changes the swing, the charm swings on its bottom ring, and the cluster always settles back to its rest pose.
 - **Custom Hardware Finishes**: Choose between Steel, Gold, and Noir alloy finishes with adjustable link counts (4–10 links) and cluster fanning spread.
 - **Selectable 3D Animation Exports**: Choose between **Swing** (pendulum physics loop) and **Spin** (continuous 360° turntable showcase) when exporting to `.GLB` or `.GLTF`, plus static `.OBJ` geometry and PNG snapshots.
 
@@ -53,5 +53,25 @@ Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji
    - **Select Animation Type**: Choose between **Swing** (natural gravity pendulum loop) or **Spin** (continuous 360° turntable showcase loop).
    - **.GLB (Anim)**: Download a binary glTF file with your selected animation bundled.
    - **.GLTF (Anim)**: Download a standard JSON glTF model with embedded animation keyframes.
-   - **.OBJ (Static)**: Export clean static geometry of your current 3D pose for modeling or 3D printing.
-   - **Snapshot**: Capture a high-resolution PNG image directly from the canvas.
+   - **.OBJ (Static)**: Static geometry of your current pose in **millimetres** (glTF is exported in metres).
+   - **Snapshot**: PNG at 2× the on-screen size, with an optional transparent background.
+
+---
+
+## ⌨️ Keyboard, undo and sharing
+
+- **Viewport keys** (focus the 3D view): `←` `→` `↑` `↓` swing, `Space` push, `S` spin, `R` rest, `1`–`5` or `[` `]` select a charm.
+- **Undo / redo**: `Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z` (or the header buttons).
+- **Autosave & share**: your design is saved in the browser and mirrored in the URL hash; the link button copies a link that reopens the same keychain.
+
+## 🛠️ Development
+
+```bash
+npm install
+npm run dev      # start Vite
+npm run lint     # ESLint
+npm test         # Vitest (physics, chain geometry, design format, UI regressions)
+npm run build    # production build
+```
+
+Scene code lives in `src/three/`: `physics.js` (fixed-step pendulum), `pose.js` (shared pose maths used by the viewport and exporters), `studio.js` (renderer, camera, lighting), `interaction.js` (pointer handling), `exporters.js` (loaded on demand).

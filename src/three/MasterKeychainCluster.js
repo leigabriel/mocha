@@ -1,257 +1,337 @@
 import * as THREE from 'three';
-import { CONFIG, HARDWARE_MATS } from '../constants/index.js';
-import { createSplitRingMesh } from './meshBuilders.js';
+import { CONFIG, MAX_CHARMS } from '../constants/index.js';
+import { clamp, wrapAngle } from '../utils/helpers.js';
 import { ClusterCharmBranch } from './ClusterCharmBranch.js';
-import { getClusterSlots } from './clusterSlots.js';
+import { settleRest, stepItems } from './dynamics.js';
+import { branchPosition, branchQuaternion, masterQuaternion, pivotQuaternion, ringPosition, slotFor } from './pose.js';
+import { applyFinish, createSplitRingMesh, getHardwareMaterial, markHardware } from './hardware.js';
+import {
+  FIXED_DT,
+  createBranchState,
+  MAX_STEPS_PER_FRAME,
+  branchIsResting,
+  createMasterState,
+  masterIsResting,
+  stepMaster,
+  zeroMaster,
+} from './physics.js';
+
+const DRAG_FOLLOW_RATE = 24; // 1/s, how tightly the cluster follows a dragged pointer
+const _qMaster = new THREE.Quaternion();
+const _qTmp = new THREE.Quaternion();
+const _vTmp = new THREE.Vector3();
+const _box = new THREE.Box3();
+const _meshBox = new THREE.Box3();
 
 export class MasterKeychainCluster {
-  constructor(showToastFn = null) {
-    this.showToast = showToastFn || ((msg) => {
-      if (typeof window.showToast === 'function') window.showToast(msg);
-    });
+  /**
+   * @param {{ onToast?: (msg: string) => void, rng?: () => number }} options
+   */
+  constructor({ onToast = () => {}, rng = Math.random } = {}) {
+    this.onToast = onToast;
+    this.rng = rng;
 
-    this.anchorPos = new THREE.Vector3(0, 0.98, 0);
+    // The pivot sits on the peg the ring hangs from.
+    this.anchorPos = new THREE.Vector3(0, 0.95, 0);
     this.rootGroup = new THREE.Group();
-    this.rootGroup.name = "MasterKeychainCluster";
+    this.rootGroup.name = 'MasterKeychainCluster';
     this.rootGroup.position.copy(this.anchorPos);
 
-    this.masterSplitRingMesh = null;
-    this.branches = [];
     this.finish = 'steel';
+    this.spread = 1.0;
+    this.branches = [];
 
-    // Master Cluster Pendulum Physics (Cluster-wide swing & 360° spin)
-    this.thetaX = 0; // Cluster tilt X
-    this.thetaZ = 0; // Cluster tilt Z
-    this.thetaY = 0; // Cluster 360° yaw spin
-    this.omegaX = 0;
-    this.omegaZ = 0;
-    this.omegaY = 0;
+    this.ringMesh = markHardware(createSplitRingMesh(getHardwareMaterial(this.finish)));
+    this.rootGroup.add(this.ringMesh);
+    this.ringPick = new THREE.Mesh(
+      new THREE.TorusGeometry(CONFIG.masterRingRadius, 0.05, 6, 24),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    this.ringPick.userData.pick = true;
+    this.ringPick.userData.branch = null;
+    this.ringPick.name = 'Pick_Ring';
+    this.ringMesh.add(this.ringPick);
+
+    this.sim = createMasterState();
+    this.accumulator = 0;
+    this.asleep = true;
+    this.version = 0; // bumped whenever the rendered pose or structure changes
 
     this.isGrabbed = false;
-    this.dragTargetAngleX = 0;
-    this.dragTargetAngleZ = 0;
+    this.dragTarget = { x: 0, y: 0, z: 0 };
 
-    this.buildCluster();
+    this.restBounds = new THREE.Box3();
+    this.assemblyBounds = new THREE.Box3();
+    this.updateTransforms();
   }
 
-  buildCluster() {
-    while (this.rootGroup.children.length > 0) {
-      this.rootGroup.remove(this.rootGroup.children[0]);
-    }
+  // ---------------------------------------------------------------- structure
 
-    const matSpec = HARDWARE_MATS[this.finish] || HARDWARE_MATS.steel;
-    const hwMaterial = new THREE.MeshStandardMaterial({
-      color: matSpec.color,
-      metalness: matSpec.metalness,
-      roughness: matSpec.roughness,
-      transparent: false,
-      opacity: 1.0,
-      depthWrite: true,
-    });
-
-    // 1. One Central Shared Split Ring (Top Anchor)
-    this.masterSplitRingMesh = createSplitRingMesh(hwMaterial, CONFIG.masterRingRadius, CONFIG.masterRingWire);
-    this.rootGroup.add(this.masterSplitRingMesh);
-
-    // 2. Individual Attached Charm Branches with 4-10 Chain Links
-    this.branches.forEach((b) => {
-      b.build(hwMaterial);
-      this.rootGroup.add(b.branchGroup);
-    });
-
-    this.updateMeshTransforms();
+  get hardwareMaterial() {
+    return getHardwareMaterial(this.finish);
   }
 
   addCharm(emoji = '🥑', thickness = 2, chainLinks = 4) {
-    if (this.branches.length >= 5) {
-      this.showToast('MAX 5 CHARMS IN CLUSTER');
+    if (this.branches.length >= MAX_CHARMS) {
+      this.onToast(`MAX ${MAX_CHARMS} CHARMS IN CLUSTER`);
       return null;
     }
-    const index = this.branches.length;
-    const branch = new ClusterCharmBranch(index, emoji, thickness, chainLinks);
+    const branch = new ClusterCharmBranch(this.branches.length, emoji, thickness, chainLinks);
     this.branches.push(branch);
-
-    const matSpec = HARDWARE_MATS[this.finish] || HARDWARE_MATS.steel;
-    const hwMaterial = new THREE.MeshStandardMaterial({
-      color: matSpec.color,
-      metalness: matSpec.metalness,
-      roughness: matSpec.roughness,
-      transparent: false,
-      opacity: 1.0,
-      depthWrite: true,
-    });
-
-    branch.build(hwMaterial);
+    branch.build(this.hardwareMaterial);
     this.rootGroup.add(branch.branchGroup);
-    this.applyImpulse(0.5);
-    this.updateMeshTransforms();
+    this.structureChanged();
     return branch;
   }
 
   removeCharm(index) {
     if (this.branches.length <= 1) {
-      this.showToast('MINIMUM 1 CHARM REQUIRED');
+      this.onToast('MINIMUM 1 CHARM REQUIRED');
       return false;
     }
     const branch = this.branches[index];
-    this.rootGroup.remove(branch.branchGroup);
+    if (!branch) return false;
+    branch.dispose();
     this.branches.splice(index, 1);
-
-    // Re-index remaining branches
-    this.branches.forEach((b, i) => {
-      b.index = i;
-      b.branchGroup.name = `CharmBranch_${i}_${b.emoji}`;
-    });
-
-    this.applyImpulse(0.4);
-    this.updateMeshTransforms();
+    this.branches.forEach((b, i) => b.rename(i));
+    this.structureChanged();
     return true;
   }
 
-  updatePhysics(dt) {
-    // 1. Master Shared Split Ring Physics
-    if (this.isGrabbed) {
-      this.thetaX += (this.dragTargetAngleX - this.thetaX) * Math.min(1.0, dt * 24.0);
-      this.thetaZ += (this.dragTargetAngleZ - this.thetaZ) * Math.min(1.0, dt * 24.0);
-    } else {
-      // Pendulum swing for the master cluster
-      const effectiveL = CONFIG.masterRingRadius + 0.35;
-      const gOverL = 24.0 / effectiveL;
-
-      const accelX = -gOverL * Math.sin(this.thetaX) - 1.85 * this.omegaX;
-      const accelZ = -gOverL * Math.sin(this.thetaZ) - 1.85 * this.omegaZ;
-      
-      // Gentle centering torque for 360° spin
-      const restTorqueY = -1.25 * Math.sin(this.thetaY);
-      const accelY = restTorqueY - 1.95 * this.omegaY;
-
-      this.omegaX += accelX * dt;
-      this.omegaZ += accelZ * dt;
-      this.omegaY += accelY * dt;
-
-      this.thetaX += this.omegaX * dt;
-      this.thetaZ += this.omegaZ * dt;
-      this.thetaY += this.omegaY * dt;
-
-      // Asymptotic rest stabilizer: Completely eliminates vibration when untouched
-      const vel = Math.abs(this.omegaX) + Math.abs(this.omegaZ) + Math.abs(this.omegaY);
-      const disp = Math.abs(this.thetaX) + Math.abs(this.thetaZ) + Math.abs(this.thetaY % (Math.PI * 2));
-      if (vel < 0.0018 && disp < 0.0012) {
-        this.thetaX = 0; this.thetaZ = 0; this.thetaY = 0;
-        this.omegaX = 0; this.omegaZ = 0; this.omegaY = 0;
-      }
-    }
-
-    // 2. Individual Charm Physics
-    const gChain = 32.0;
-    this.branches.forEach((b) => {
-      const accelX = -gChain * Math.sin(b.thetaX) - 4.0 * b.omegaX - this.omegaX * 1.8;
-      const accelZ = -gChain * Math.sin(b.thetaZ) - 4.0 * b.omegaZ - this.omegaZ * 1.8;
-      const accelY = -gChain * 0.4 * Math.sin(b.thetaY) - 3.6 * b.omegaY - this.omegaY * 0.9;
-
-      b.omegaX += accelX * dt;
-      b.omegaZ += accelZ * dt;
-      b.omegaY += accelY * dt;
-
-      b.thetaX += b.omegaX * dt;
-      b.thetaZ += b.omegaZ * dt;
-      b.thetaY += b.omegaY * dt;
-    });
-
-    // 3. Mutual Soft Repulsion
-    const nBranches = this.branches.length;
-    for (let i = 0; i < nBranches; i++) {
-      for (let j = i + 1; j < nBranches; j++) {
-        const b1 = this.branches[i];
-        const b2 = this.branches[j];
-
-        const dx = b1.worldCentroid.x - b2.worldCentroid.x;
-        const dz = b1.worldCentroid.z - b2.worldCentroid.z;
-        const distSq = dx * dx + dz * dz;
-        const minDist = 0.32 * CONFIG.clusterSpread;
-
-        if (distSq < minDist * minDist && distSq > 0.0001) {
-          const dist = Math.sqrt(distSq);
-          const overlap = (minDist - dist) / minDist;
-          const pushX = (dx / dist) * overlap * 1.8;
-          const pushZ = (dz / dist) * overlap * 1.8;
-
-          b1.omegaZ += pushX * dt * 14.0;
-          b2.omegaZ -= pushX * dt * 14.0;
-          b1.omegaX -= pushZ * dt * 14.0;
-          b2.omegaX += pushZ * dt * 14.0;
-        }
-      }
-    }
-
-    this.updateMeshTransforms();
+  /** Applies emoji / thickness / chain-link changes to one charm and rebuilds it. */
+  updateCharm(index, changes) {
+    const branch = this.branches[index];
+    if (!branch) return null;
+    Object.assign(branch, changes);
+    const charm = branch.build(this.hardwareMaterial);
+    this.structureChanged();
+    return charm;
   }
 
-  updateMeshTransforms() {
-    const _qMaster = new THREE.Quaternion();
-    const _eMaster = new THREE.Euler(this.thetaX, this.thetaY, this.thetaZ, 'YXZ');
-    _qMaster.setFromEuler(_eMaster);
-
-    // 1. Shared Master Split Ring (Top Pivot)
-    this.masterSplitRingMesh.position.set(0, 0, 0);
-    this.masterSplitRingMesh.quaternion.copy(_qMaster);
-
-    const spread = CONFIG.clusterSpread;
-    const CLUSTER_SLOTS = getClusterSlots();
-
-    // 2. Position Each Charm in the Fanned Cluster
-    this.branches.forEach((b, idx) => {
-      const slot = CLUSTER_SLOTS[idx % CLUSTER_SLOTS.length];
-
-      // Top mount point on the shared split ring
-      const ringPos = slot.ringOffset.clone();
-      ringPos.x *= spread;
-      ringPos.applyQuaternion(_qMaster);
-      b.branchGroup.position.copy(ringPos);
-
-      // Combined angles: Slot Fanned Angle + Master Rotation + Dynamic Secondary Inertia
-      const totalYaw = this.thetaY + slot.restYaw + b.thetaY;
-      const totalPitch = this.thetaX + slot.restPitch + b.thetaX;
-      const totalRoll = this.thetaZ + slot.restRoll + b.thetaZ;
-
-      const _eBranch = new THREE.Euler(totalPitch, totalYaw, totalRoll, 'YXZ');
-      const _qBranch = new THREE.Quaternion().setFromEuler(_eBranch);
-      b.branchGroup.quaternion.copy(_qBranch);
-
-      // Keep track of world centroid for collision calculations
-      if (b.charmGroup) {
-        b.charmGroup.getWorldPosition(b.worldCentroid);
-      }
+  /** Replaces every charm and the ring settings at once (undo/redo, share links). */
+  loadDesign({ charms, finish, spread }) {
+    this.branches.forEach((b) => b.dispose());
+    this.branches = [];
+    this.finish = finish;
+    this.spread = spread;
+    charms.slice(0, MAX_CHARMS).forEach((c, i) => {
+      const branch = new ClusterCharmBranch(i, c.emoji, c.thickness, c.links);
+      this.branches.push(branch);
+      branch.build(this.hardwareMaterial);
+      this.rootGroup.add(branch.branchGroup);
     });
+    applyFinish(this.rootGroup, finish);
+    this.recomputeRest();
+    this.resetPose();
+  }
+
+  setFinish(finish) {
+    this.finish = finish;
+    applyFinish(this.rootGroup, finish);
+    this.version++;
+  }
+
+  setSpread(spread) {
+    this.spread = spread;
+    this.structureChanged();
+  }
+
+  structureChanged() {
+    this.recomputeRest();
+    this.wake();
+  }
+
+  // ------------------------------------------------------------------ poses
+
+  /** One rigid body per charm for the shared contact solver. */
+  collisionItems() {
+    return this.branches.map((b, i) => ({ sim: b.sim, slot: slotFor(i), lengths: b.lengths, geom: b.geom }));
+  }
+
+  /**
+   * Finds the contact equilibrium (the pose the cluster hangs in when left alone, with
+   * no two charms overlapping), stores it on each branch and frames the camera on it.
+   */
+  recomputeRest() {
+    const rest = settleRest(this.collisionItems(), this.spread);
+    this.branches.forEach((b, i) => (b.restSim = rest[i]));
+
+    const savedMaster = { ...this.sim };
+    const savedBranches = this.branches.map((b) => ({ ...b.sim }));
+    zeroMaster(this.sim);
+    this.branches.forEach((b) => Object.assign(b.sim, b.restSim));
+    this.updateTransforms();
+
+    this.assemblyBounds.copy(this.computeBounds());
+    // The framing box also includes the peg the ring hangs from.
+    this.restBounds.copy(this.assemblyBounds);
+    this.restBounds.expandByPoint(_vTmp.copy(this.anchorPos).add(new THREE.Vector3(0, 0.06, 0)));
+
+    Object.assign(this.sim, savedMaster);
+    this.branches.forEach((b, i) => Object.assign(b.sim, savedBranches[i]));
+    this.updateTransforms();
+  }
+
+  /** Puts every branch back on its settled rest pose. */
+  applyRestPose() {
+    zeroMaster(this.sim);
+    this.branches.forEach((b) => Object.assign(b.sim, b.restSim ?? createBranchState()));
+  }
+
+  computeBounds() {
+    _box.makeEmpty();
+    this.rootGroup.updateMatrixWorld(true);
+    this.rootGroup.traverse((obj) => {
+      if (!obj.isMesh || obj.userData.pick) return;
+      if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+      _meshBox.copy(obj.geometry.boundingBox).applyMatrix4(obj.matrixWorld);
+      _box.union(_meshBox);
+    });
+    return _box.clone();
+  }
+
+  updateTransforms() {
+    masterQuaternion(this.sim, _qMaster);
+
+    // The ring swings about the peg, so its centre travels with the rotation.
+    this.ringMesh.position.copy(ringPosition(_qMaster, _vTmp));
+    this.ringMesh.quaternion.copy(_qMaster);
+
+    this.branches.forEach((b, idx) => {
+      const slot = slotFor(idx);
+      b.branchGroup.position.copy(branchPosition(_qMaster, slot, this.spread, _vTmp));
+      b.branchGroup.quaternion.copy(branchQuaternion(this.sim, b.sim, slot, _qTmp));
+      b.charmPivot.quaternion.copy(pivotQuaternion(b.sim, _qTmp));
+    });
+
+    this.rootGroup.updateMatrixWorld(true);
+    this.branches.forEach((b) => b.charmGroup?.getWorldPosition(b.worldCentroid));
+    this.version++;
+  }
+
+  // ---------------------------------------------------------------- dynamics
+
+  wake() {
+    this.asleep = false;
+  }
+
+  isAwake() {
+    return !this.asleep || this.isGrabbed;
+  }
+
+  /** Advances physics by `dt` seconds in fixed steps. Returns true if the pose changed. */
+  update(dt) {
+    if (!this.isAwake()) return false;
+    this.accumulator = Math.min(this.accumulator + dt, FIXED_DT * MAX_STEPS_PER_FRAME);
+    let stepped = false;
+    while (this.accumulator >= FIXED_DT) {
+      this.accumulator -= FIXED_DT;
+      this.step(FIXED_DT);
+      stepped = true;
+    }
+    if (!stepped) return false;
+
+    if (!this.isGrabbed && masterIsResting(this.sim) && this.branches.every((b) => branchIsResting(b.sim, b.restSim))) {
+      this.applyRestPose();
+      this.asleep = true;
+      this.updateTransforms();
+    }
+    return true;
+  }
+
+  step(dt) {
+    const m = this.sim;
+    if (this.isGrabbed) {
+      const k = 1 - Math.exp(-DRAG_FOLLOW_RATE * dt);
+      const px = m.thetaX;
+      const pz = m.thetaZ;
+      const py = m.thetaY;
+      m.thetaX += (this.dragTarget.x - m.thetaX) * k;
+      m.thetaZ += (this.dragTarget.z - m.thetaZ) * k;
+      m.thetaY += (this.dragTarget.y - m.thetaY) * k;
+      // Charms feel the motion of the cluster being dragged.
+      m.omegaX = (m.thetaX - px) / dt;
+      m.omegaZ = (m.thetaZ - pz) / dt;
+      m.omegaY = (m.thetaY - py) / dt;
+    } else {
+      stepMaster(m, dt);
+    }
+
+    stepItems(m, this.collisionItems(), this.spread, dt);
+    this.updateTransforms();
   }
 
   applyImpulse(force = 0.5) {
-    this.omegaX += (Math.random() - 0.4) * 4.8 * force;
-    this.omegaZ += (Math.random() - 0.5) * 5.8 * force;
-    this.omegaY += (Math.random() - 0.5) * 7.0 * force;
-
+    const r = () => this.rng() - 0.5;
+    this.sim.omegaX += (this.rng() - 0.4) * 4.8 * force;
+    this.sim.omegaZ += r() * 5.8 * force;
+    this.sim.omegaY += r() * 7.0 * force;
     this.branches.forEach((b) => {
-      b.omegaX += (Math.random() - 0.5) * 3.5 * force;
-      b.omegaZ += (Math.random() - 0.5) * 3.5 * force;
-      b.omegaY += (Math.random() - 0.5) * 4.5 * force;
+      b.sim.omegaX += r() * 3.5 * force;
+      b.sim.omegaZ += r() * 3.5 * force;
+      b.sim.omegaY += r() * 4.5 * force;
     });
+    this.wake();
+  }
+
+  /** Pushes the cluster sideways (-1 = left, +1 = right) or forward/back. */
+  nudge(direction, axis = 'z') {
+    if (axis === 'x') this.sim.omegaX += direction * 3.2;
+    else this.sim.omegaZ += -direction * 3.2;
+    this.wake();
   }
 
   applySpin(speed = 6.5) {
-    this.omegaY += (Math.random() > 0.5 ? 1 : -1) * speed;
-    this.omegaX += (Math.random() - 0.5) * 1.8;
-    this.omegaZ += (Math.random() - 0.5) * 1.8;
+    this.sim.omegaY += (this.rng() > 0.5 ? 1 : -1) * speed;
+    this.sim.omegaX += (this.rng() - 0.5) * 1.8;
+    this.sim.omegaZ += (this.rng() - 0.5) * 1.8;
+    this.wake();
   }
 
   resetPose() {
-    this.thetaX = 0; this.thetaZ = 0; this.thetaY = 0;
-    this.omegaX = 0; this.omegaZ = 0; this.omegaY = 0;
+    this.applyRestPose();
+    this.isGrabbed = false;
+    this.asleep = true;
+    this.accumulator = 0;
+    this.updateTransforms();
+  }
 
-    this.branches.forEach((b) => {
-      b.thetaX = 0; b.thetaZ = 0; b.thetaY = 0;
-      b.omegaX = 0; b.omegaZ = 0; b.omegaY = 0;
-    });
+  // ------------------------------------------------------------------- grab
 
-    this.updateMeshTransforms();
+  beginGrab() {
+    this.isGrabbed = true;
+    this.dragTarget.x = this.sim.thetaX;
+    this.dragTarget.y = this.sim.thetaY;
+    this.dragTarget.z = this.sim.thetaZ;
+    this.wake();
+  }
+
+  setDragTarget({ x, y, z }) {
+    if (x !== undefined) this.dragTarget.x = clamp(x, -1.15, 1.15);
+    if (z !== undefined) this.dragTarget.z = clamp(z, -1.15, 1.15);
+    if (y !== undefined) this.dragTarget.y = y;
+  }
+
+  endGrab({ omegaX = 0, omegaY = 0, omegaZ = 0 } = {}) {
+    if (!this.isGrabbed) return;
+    this.isGrabbed = false;
+    this.sim.thetaY = wrapAngle(this.sim.thetaY);
+    this.sim.omegaX = clamp(omegaX, -7, 7);
+    this.sim.omegaY = clamp(omegaY, -12, 12);
+    this.sim.omegaZ = clamp(omegaZ, -7, 7);
+    this.wake();
+  }
+
+  // ---------------------------------------------------------------- picking
+
+  getPickTargets() {
+    return [this.ringPick, ...this.branches.flatMap((b) => b.pickMeshes)];
+  }
+
+  dispose() {
+    this.branches.forEach((b) => b.dispose());
+    this.branches = [];
+    this.ringPick.geometry.dispose();
+    this.ringPick.material.dispose();
   }
 }

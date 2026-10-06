@@ -4,36 +4,58 @@
   --font-mono: "Geist Pixel", monospace;
   --font-pixel: "Silkscreen", monospace;
   --color-brand: #0034FF;
+  --color-brandDeep: #002bd4;
   --color-sceneLight: #EBEBEB;
   --color-sceneDark: #212121;
 }
 
-/* STRICT MINIMALIST SYSTEM: ZERO ROUNDED CORNERS */
-*, *::before, *::after {
-  border-radius: 0px !important;
-  -webkit-border-radius: 0px !important;
-  box-shadow: none !important;
-}
+/* Sharp, square UI. Scoped to form controls instead of a global !important reset so
+   shadows, rounding and focus styles still work where a component asks for them. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    border-radius: 0;
+  }
 
-body {
-  font-family: 'Geist Pixel', monospace;
-  background-color: #EBEBEB;
-  color: #FFFFFF;
-  user-select: none;
-  -webkit-user-select: none;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family: 'Geist Pixel', monospace;
+    background-color: #EBEBEB;
+    color: #FFFFFF;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Visible keyboard focus everywhere (white reads on the blue panel). */
+  :focus-visible {
+    outline: 2px solid #FFFFFF;
+    outline-offset: 2px;
+  }
 }
 
 .font-pixel {
   font-family: 'Silkscreen', monospace;
 }
 
-/* Minimalist Technical Scrollbars */
+/* Text that stays at least 4.5:1 on #0034FF (white at 85% is 5.5:1). */
+.text-soft {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Minimalist technical scrollbars */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: #0023b3;
@@ -42,69 +64,88 @@ body {
   background: #FFFFFF;
 }
 
-/* Sharp UI Buttons */
+/* Buttons */
 .hud-btn {
   background-color: #0034FF;
   color: #FFFFFF;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease;
 }
-.hud-btn:hover {
+.hud-btn:hover:not(:disabled) {
   background-color: #FFFFFF;
   color: #0034FF;
   border-color: #FFFFFF;
-}
-.hud-btn.active {
-  background-color: #FFFFFF;
-  color: #0034FF;
-  border-color: #FFFFFF;
-  font-weight: 700;
 }
 
 .hud-btn-subtle {
   background-color: transparent;
   color: #FFFFFF;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  transition: background-color 0.1s ease, border-color 0.1s ease;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease;
 }
-.hud-btn-subtle:hover {
+.hud-btn-subtle:hover:not(:disabled) {
   background-color: rgba(255, 255, 255, 0.18);
   border-color: #FFFFFF;
 }
-.hud-btn-subtle.active {
+
+.hud-btn:disabled,
+.hud-btn-subtle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Segmented / toggle buttons: the pressed state is unmistakable (filled white). */
+.seg {
+  background-color: transparent;
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.seg:hover {
+  border-color: #FFFFFF;
+  background-color: rgba(255, 255, 255, 0.14);
+}
+.seg[aria-pressed="true"],
+.seg[aria-selected="true"] {
   background-color: #FFFFFF;
   color: #0034FF;
   border-color: #FFFFFF;
   font-weight: 700;
 }
 
-/* Flat Custom Range Slider */
+/* Flat range slider with a visible focus state */
 input[type=range] {
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.3);
-  height: 3px;
-  outline: none;
+  background: rgba(255, 255, 255, 0.4);
+  height: 4px;
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   background: #FFFFFF;
   cursor: pointer;
   border: none;
 }
 input[type=range]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   background: #FFFFFF;
   cursor: pointer;
   border: none;
 }
+input[type=range]:focus-visible {
+  outline-offset: 6px;
+}
 
 #viewportCanvas {
   transition: background-color 0.25s ease;
+}
+#viewportCanvas:focus-visible {
+  outline: 3px solid #0034FF;
+  outline-offset: -3px;
 }
 
 .emoji-item-btn {
@@ -117,4 +158,24 @@ input[type=range]::-moz-range-thumb {
 }
 .emoji-item-btn:active {
   transform: scale(0.96);
+}
+
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details[open] > summary .chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
