@@ -13,6 +13,10 @@ const ZETA = 0.35; // branch damping ratio, keeps feel constant across chain len
 
 export const SLEEP_VEL = 0.012;
 export const SLEEP_DISP = 0.004;
+// Charms pressed together keep a tiny residual contact speed (about 1 mm/s), so branches
+// sleep at a slightly looser speed than the master swing.
+export const BRANCH_SLEEP_VEL = 0.04;
+export const BRANCH_SLEEP_DISP = 0.012;
 
 export function createMasterState() {
   return { thetaX: 0, thetaZ: 0, thetaY: 0, omegaX: 0, omegaZ: 0, omegaY: 0 };
@@ -44,9 +48,9 @@ export function stepMaster(m, dt) {
  * `lengths.pivot` is the pivot-to-centre-of-mass distance of the chain + charm
  * assembly and `lengths.charm` the charm's pendulum length about the bottom ring.
  */
-export function stepBranch(b, m, lengths, dt) {
+export function stepBranch(b, m, lengths, dt, dampingScale = 1) {
   const w2 = G_BRANCH / lengths.pivot;
-  const damp = 2 * ZETA * Math.sqrt(w2);
+  const damp = 2 * ZETA * Math.sqrt(w2) * dampingScale;
 
   const accelX = -w2 * Math.sin(b.thetaX) - damp * b.omegaX - 1.8 * m.omegaX;
   const accelZ = -w2 * Math.sin(b.thetaZ) - damp * b.omegaZ - 1.8 * m.omegaZ;
@@ -61,7 +65,7 @@ export function stepBranch(b, m, lengths, dt) {
 
   // The charm lags behind the chain's acceleration, then swings back.
   const cw2 = G_BRANCH / lengths.charm;
-  const cdamp = 2 * 0.28 * Math.sqrt(cw2);
+  const cdamp = 2 * 0.28 * Math.sqrt(cw2) * dampingScale;
   const cAccX = -cw2 * Math.sin(b.charmX) - cdamp * b.charmOmegaX - 0.9 * accelX;
   const cAccZ = -cw2 * Math.sin(b.charmZ) - cdamp * b.charmOmegaZ - 0.9 * accelZ;
   b.charmOmegaX += cAccX * dt;
@@ -76,14 +80,18 @@ export function masterIsResting(m) {
   return vel < SLEEP_VEL && disp < SLEEP_DISP;
 }
 
-export function branchIsResting(b) {
+/**
+ * A branch is at rest when it has stopped moving and sits on its rest pose (the contact
+ * equilibrium, `rest`). Checking the position as well keeps it awake at a swing's turning point.
+ */
+export function branchIsResting(b, rest = createBranchState()) {
   const vel =
     Math.abs(b.omegaX) + Math.abs(b.omegaZ) + Math.abs(b.omegaY) +
     Math.abs(b.charmOmegaX) + Math.abs(b.charmOmegaZ);
   const disp =
-    Math.abs(b.thetaX) + Math.abs(b.thetaZ) + Math.abs(b.thetaY) +
-    Math.abs(b.charmX) + Math.abs(b.charmZ);
-  return vel < SLEEP_VEL && disp < SLEEP_DISP;
+    Math.abs(b.thetaX - rest.thetaX) + Math.abs(b.thetaZ - rest.thetaZ) + Math.abs(b.thetaY - rest.thetaY) +
+    Math.abs(b.charmX - rest.charmX) + Math.abs(b.charmZ - rest.charmZ);
+  return vel < BRANCH_SLEEP_VEL && disp < BRANCH_SLEEP_DISP;
 }
 
 export function zeroMaster(m) {

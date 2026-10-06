@@ -6,8 +6,14 @@ import { createBranchState } from './physics.js';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
-const selectedLineMat = new THREE.LineBasicMaterial({ color: 0x0034ff });
-const hoverLineMat = new THREE.LineBasicMaterial({ color: 0xff9f1c });
+// Hover / selection feedback is a soft emissive tint on the charm itself (no wireframe
+// box), so nothing extra is ever drawn around a charm or ends up in an export.
+const HIGHLIGHT = {
+  hover: { color: 0xff9f1c, intensity: 0.32 },
+  selected: { color: 0x3b6bff, intensity: 0.4 },
+};
+// Collision boxes are padded a hair so touching charms keep a visible gap.
+const COLLISION_PAD = 0.0015;
 const pickMat = new THREE.MeshBasicMaterial({ visible: false });
 
 /**
@@ -37,14 +43,16 @@ export class ClusterCharmBranch {
 
     this.charmPivot = new THREE.Group();
     this.charmGroup = null;
-    this.outline = null;
+    this.highlightMode = 'none';
+    this.ownMaterials = [];
+    this.geom = null;
     this.charmData = null;
     this.pickMeshes = [];
 
     this.sim = createBranchState();
     this.lengths = { pivot: 0.5, charm: 0.25 };
     this.worldCentroid = new THREE.Vector3();
-    this.restCentroid = new THREE.Vector3();
+    this.restSim = createBranchState(); // settled, overlap-free rest pose
     this.monochrome = false;
 
     this.rename(index);
@@ -65,11 +73,9 @@ export class ClusterCharmBranch {
       pick.geometry.dispose();
     }
     this.pickMeshes = [];
-    if (this.outline) {
-      this.outline.parent?.remove(this.outline);
-      this.outline.geometry.dispose();
-      this.outline = null;
-    }
+    for (const mat of this.ownMaterials) mat.dispose();
+    this.ownMaterials = [];
+    this.geom = null;
     if (this.charmGroup) {
       this.charmPivot.remove(this.charmGroup);
       this.charmGroup = null;
@@ -82,7 +88,7 @@ export class ClusterCharmBranch {
   }
 
   build(hwMaterial) {
-    const highlight = this.outline?.visible ? this.outline.material : null;
+    const highlight = this.highlightMode;
     this.clear();
     const n = this.chainLinks;
     const Rj = CONFIG.jumpRingRadius;
@@ -126,28 +132,38 @@ export class ClusterCharmBranch {
     this.charmPivot.add(this.charmGroup);
     this.branchGroup.add(this.charmPivot);
 
-    // Selection / hover outline and generous pick volumes (not exported)
+    // Each branch owns its charm materials so the highlight tint stays on one charm.
+    const plastic = charm.characterMesh.material.clone();
+    const lugMat = charm.lugMesh.material.clone();
+    charm.characterMesh.material = plastic;
+    charm.lugMesh.material = lugMat;
+    this.ownMaterials = [plastic, lugMat];
+
+    // Generous invisible pick volume (never rendered or exported)
     const pad = 0.012;
     const box = new THREE.BoxGeometry(charm.size.x + pad, charm.size.y + pad, charm.size.z + pad);
-    this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(box), selectedLineMat);
-    this.outline.name = `Outline_${this.index}`;
-    this.outline.position.set(this.charmGroup.position.x - charm.lugOffset.x, this.charmGroup.position.y - charm.lugOffset.y, 0);
-    this.outline.visible = false;
-    this.charmPivot.add(this.outline);
-
     const charmPick = new THREE.Mesh(box, pickMat);
-    charmPick.position.copy(this.outline.position);
+    charmPick.position.set(this.charmGroup.position.x - charm.lugOffset.x, this.charmGroup.position.y - charm.lugOffset.y, 0);
     this.addPick(charmPick, this.charmPivot);
+
+    // Rigid body used for charm-vs-charm collision, in the branch frame.
+    this.geom = {
+      botY,
+      drop: -Rj * 1.25,
+      lug: charm.lugOffset.clone(),
+      half: [
+        charm.size.x / 2 + COLLISION_PAD,
+        charm.size.y / 2 + COLLISION_PAD,
+        charm.size.z / 2 + COLLISION_PAD,
+      ],
+    };
 
     const chainLength = -botY + Rj;
     const chainPick = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, chainLength, 8), pickMat);
     chainPick.position.set(0, -chainLength / 2 + Rj, 0);
     this.addPick(chainPick, this.branchGroup);
 
-    if (highlight) {
-      this.outline.material = highlight;
-      this.outline.visible = true;
-    }
+    this.setHighlight(highlight);
 
     // Pendulum lengths follow the real chain and charm size, so longer chains swing slower.
     const charmArm = Rj * 1.25 + charm.lugOffset.y;
@@ -165,9 +181,17 @@ export class ClusterCharmBranch {
 
   /** mode: 'none' | 'hover' | 'selected' */
   setHighlight(mode) {
-    if (!this.outline) return;
-    this.outline.visible = mode !== 'none';
-    this.outline.material = mode === 'hover' ? hoverLineMat : selectedLineMat;
+    this.highlightMode = mode;
+    const h = HIGHLIGHT[mode];
+    for (const mat of this.ownMaterials) {
+      if (h) {
+        mat.emissive.setHex(h.color);
+        mat.emissiveIntensity = h.intensity;
+      } else {
+        mat.emissive.setHex(0x000000);
+        mat.emissiveIntensity = 1;
+      }
+    }
   }
 
   dispose() {

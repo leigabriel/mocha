@@ -3,7 +3,8 @@ import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { MM_PER_UNIT } from '../constants/index.js';
 import { downloadBlob } from '../utils/helpers.js';
-import { createBranchState, createMasterState, stepBranch } from './physics.js';
+import { resolveContacts, stepItems } from './dynamics.js';
+import { createBranchState, createMasterState } from './physics.js';
 import { branchPosition, branchQuaternion, masterQuaternion, pivotQuaternion, ringPosition, slotFor } from './pose.js';
 
 const FPS = 30;
@@ -58,13 +59,13 @@ export function simulateLoop(cluster, kind) {
   const clip = CLIPS[kind];
   const frames = Math.round(clip.duration * FPS);
   const master = createMasterState();
-  const states = cluster.branches.map(() => createBranchState());
-  const lengths = cluster.branches.map((b) => b.lengths);
+  const states = cluster.branches.map((b) => ({ ...createBranchState(), ...b.restSim }));
+  const items = cluster.branches.map((b, i) => ({ sim: states[i], slot: slotFor(i), lengths: b.lengths, geom: b.geom }));
 
   const advanceTo = (from, to) => {
     for (let t = from; t < to - 1e-9; t += SIM_DT) {
       clip.master(t + SIM_DT, master);
-      states.forEach((s, i) => stepBranch(s, master, lengths[i], SIM_DT));
+      stepItems(master, items, cluster.spread, SIM_DT);
     }
   };
 
@@ -91,6 +92,20 @@ export function simulateLoop(cluster, kind) {
     frame.branches.forEach((b, i) => FIELDS.forEach((f) => (b[f] += (first.branches[i][f] - b[f]) * s)));
     // The scripted master already loops; keep its last frame exactly equal to the first.
     if (k === frames) MASTER_FIELDS.forEach((f) => (frame.master[f] = first.master[f]));
+  }
+
+  // The blend above can nudge charms into each other, so every frame gets a final
+  // position-only pass: the exported clip never has two charms overlapping.
+  const scratch = states.map((s) => ({ ...s }));
+  const scratchItems = items.map((item, i) => ({ ...item, sim: scratch[i] }));
+  const scratchMaster = createMasterState();
+  for (const frame of record) {
+    Object.assign(scratchMaster, frame.master);
+    frame.branches.forEach((b, i) => Object.assign(scratch[i], b));
+    for (let pass = 0; pass < 6; pass++) {
+      resolveContacts(scratchMaster, scratchItems, cluster.spread, { velocity: false, bias: 1, iterations: 6 });
+    }
+    frame.branches.forEach((b, i) => FIELDS.forEach((f) => (b[f] = scratch[i][f])));
   }
 
   return { clip, frames, record };
@@ -143,6 +158,16 @@ function getClips(cluster, animType) {
 
 // ------------------------------------------------------------ export scene
 
+/** Exports never carry the viewport's hover/selection tint. */
+function stripHighlight(node) {
+  node.traverse((obj) => {
+    if (!obj.isMesh || !obj.material?.emissive || obj.material.emissive.getHex() === 0) return;
+    obj.material = obj.material.clone();
+    obj.material.emissive.setHex(0x000000);
+    obj.material.emissiveIntensity = 1;
+  });
+}
+
 /**
  * Builds the export hierarchy. `live` copies the current interactive pose; otherwise
  * the cluster is posed at rest (so animation clips start from a clean pose).
@@ -164,7 +189,7 @@ export function prepareClusterExportRoot(cluster, { live = false, unitScale = 1 
 
   cluster.branches.forEach((b, i) => {
     const slot = slotFor(i);
-    const bs = live ? b.sim : createBranchState();
+    const bs = live ? b.sim : b.restSim;
 
     const group = new THREE.Group();
     group.name = `CharmBranch_${b.index}`;
@@ -177,6 +202,7 @@ export function prepareClusterExportRoot(cluster, { live = false, unitScale = 1 
     pivot.position.copy(b.charmPivot.position);
     pivot.quaternion.copy(pivotQuaternion(bs, new THREE.Quaternion()));
     pivot.add(b.charmGroup.clone(true));
+    stripHighlight(pivot);
     group.add(pivot);
 
     root.add(group);

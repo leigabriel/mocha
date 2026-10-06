@@ -8,15 +8,15 @@ import { CONFIG } from '../constants/index.js';
  */
 export const CLUSTER_SLOTS = Object.freeze([
   // 0: centre hero, frontmost so it is never hidden
-  { x: 0.0, z: 0.07, restYaw: 0.0, restPitch: 0.03, restRoll: 0.0 },
+  { x: 0.0, z: 0.11, restYaw: 0.0, restPitch: 0.03, restRoll: 0.0 },
   // 1: left flank, turned slightly outward, behind the hero
-  { x: -0.22, z: -0.05, restYaw: -0.3, restPitch: 0.02, restRoll: 0.05 },
+  { x: -0.24, z: -0.03, restYaw: -0.3, restPitch: 0.02, restRoll: 0.05 },
   // 2: right flank
-  { x: 0.22, z: -0.04, restYaw: 0.3, restPitch: -0.02, restRoll: -0.05 },
+  { x: 0.24, z: -0.03, restYaw: 0.3, restPitch: -0.02, restRoll: -0.05 },
   // 3: rear-left accent, peeks out between hero and left flank
-  { x: -0.11, z: -0.11, restYaw: -0.15, restPitch: 0.05, restRoll: 0.02 },
+  { x: -0.09, z: -0.15, restYaw: -0.15, restPitch: 0.05, restRoll: 0.02 },
   // 4: rear-right accent
-  { x: 0.11, z: -0.1, restYaw: 0.15, restPitch: -0.04, restRoll: -0.03 },
+  { x: 0.09, z: -0.15, restYaw: 0.15, restPitch: -0.04, restRoll: -0.03 },
 ]);
 
 // A jump ring hangs from the ring wire: the wire centre sits this far above the

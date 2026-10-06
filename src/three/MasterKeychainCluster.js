@@ -2,17 +2,17 @@ import * as THREE from 'three';
 import { CONFIG, MAX_CHARMS } from '../constants/index.js';
 import { clamp, wrapAngle } from '../utils/helpers.js';
 import { ClusterCharmBranch } from './ClusterCharmBranch.js';
+import { settleRest, stepItems } from './dynamics.js';
 import { branchPosition, branchQuaternion, masterQuaternion, pivotQuaternion, ringPosition, slotFor } from './pose.js';
 import { applyFinish, createSplitRingMesh, getHardwareMaterial, markHardware } from './hardware.js';
 import {
   FIXED_DT,
+  createBranchState,
   MAX_STEPS_PER_FRAME,
   branchIsResting,
   createMasterState,
   masterIsResting,
-  stepBranch,
   stepMaster,
-  zeroBranch,
   zeroMaster,
 } from './physics.js';
 
@@ -121,9 +121,8 @@ export class MasterKeychainCluster {
       this.rootGroup.add(branch.branchGroup);
     });
     applyFinish(this.rootGroup, finish);
-    this.resetPose();
     this.recomputeRest();
-    this.asleep = true; // loading a design starts from rest; recomputeRest already bumped the render version
+    this.resetPose();
   }
 
   setFinish(finish) {
@@ -144,16 +143,25 @@ export class MasterKeychainCluster {
 
   // ------------------------------------------------------------------ poses
 
-  /** Rest-pose charm positions and bounds; repulsion only acts when charms get
-   * closer together than they sit at rest, so the rest pose is a true equilibrium. */
+  /** One rigid body per charm for the shared contact solver. */
+  collisionItems() {
+    return this.branches.map((b, i) => ({ sim: b.sim, slot: slotFor(i), lengths: b.lengths, geom: b.geom }));
+  }
+
+  /**
+   * Finds the contact equilibrium (the pose the cluster hangs in when left alone, with
+   * no two charms overlapping), stores it on each branch and frames the camera on it.
+   */
   recomputeRest() {
+    const rest = settleRest(this.collisionItems(), this.spread);
+    this.branches.forEach((b, i) => (b.restSim = rest[i]));
+
     const savedMaster = { ...this.sim };
     const savedBranches = this.branches.map((b) => ({ ...b.sim }));
     zeroMaster(this.sim);
-    this.branches.forEach((b) => zeroBranch(b.sim));
+    this.branches.forEach((b) => Object.assign(b.sim, b.restSim));
     this.updateTransforms();
 
-    this.branches.forEach((b) => b.restCentroid.copy(b.worldCentroid));
     this.assemblyBounds.copy(this.computeBounds());
     // The framing box also includes the peg the ring hangs from.
     this.restBounds.copy(this.assemblyBounds);
@@ -162,6 +170,12 @@ export class MasterKeychainCluster {
     Object.assign(this.sim, savedMaster);
     this.branches.forEach((b, i) => Object.assign(b.sim, savedBranches[i]));
     this.updateTransforms();
+  }
+
+  /** Puts every branch back on its settled rest pose. */
+  applyRestPose() {
+    zeroMaster(this.sim);
+    this.branches.forEach((b) => Object.assign(b.sim, b.restSim ?? createBranchState()));
   }
 
   computeBounds() {
@@ -217,9 +231,8 @@ export class MasterKeychainCluster {
     }
     if (!stepped) return false;
 
-    if (!this.isGrabbed && masterIsResting(this.sim) && this.branches.every((b) => branchIsResting(b.sim))) {
-      zeroMaster(this.sim);
-      this.branches.forEach((b) => zeroBranch(b.sim));
+    if (!this.isGrabbed && masterIsResting(this.sim) && this.branches.every((b) => branchIsResting(b.sim, b.restSim))) {
+      this.applyRestPose();
       this.asleep = true;
       this.updateTransforms();
     }
@@ -244,33 +257,8 @@ export class MasterKeychainCluster {
       stepMaster(m, dt);
     }
 
-    for (const b of this.branches) stepBranch(b.sim, m, b.lengths, dt);
+    stepItems(m, this.collisionItems(), this.spread, dt);
     this.updateTransforms();
-    this.applyRepulsion(dt);
-  }
-
-  applyRepulsion(dt) {
-    const n = this.branches.length;
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const b1 = this.branches[i];
-        const b2 = this.branches[j];
-        const restDist = Math.hypot(b1.restCentroid.x - b2.restCentroid.x, b1.restCentroid.z - b2.restCentroid.z);
-        const threshold = restDist * 0.75;
-        const dx = b1.worldCentroid.x - b2.worldCentroid.x;
-        const dz = b1.worldCentroid.z - b2.worldCentroid.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist >= threshold || dist < 1e-4 || threshold < 1e-3) continue;
-
-        const overlap = (threshold - dist) / threshold;
-        const pushX = (dx / dist) * overlap * 1.8 * 14 * dt;
-        const pushZ = (dz / dist) * overlap * 1.8 * 14 * dt;
-        b1.sim.omegaZ += pushX;
-        b2.sim.omegaZ -= pushX;
-        b1.sim.omegaX -= pushZ;
-        b2.sim.omegaX += pushZ;
-      }
-    }
   }
 
   applyImpulse(force = 0.5) {
@@ -301,8 +289,7 @@ export class MasterKeychainCluster {
   }
 
   resetPose() {
-    zeroMaster(this.sim);
-    this.branches.forEach((b) => zeroBranch(b.sim));
+    this.applyRestPose();
     this.isGrabbed = false;
     this.asleep = true;
     this.accumulator = 0;

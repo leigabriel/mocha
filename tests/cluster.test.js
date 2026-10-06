@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-let MasterKeychainCluster, chainElementAngle, simulateLoop;
+import * as THREE from 'three';
+import { MM_PER_UNIT } from '../src/constants/index.js';
+import { obbFromMesh, obbPenetration } from '../src/three/collision.js';
+import { maxPenetration } from '../src/three/dynamics.js';
+import { createMasterState } from '../src/three/physics.js';
+
+let MasterKeychainCluster, chainElementAngle, simulateLoop, prepareClusterExportRoot;
 
 beforeAll(async () => {
   // Minimal canvas so the emoji rasteriser runs under node.
@@ -19,7 +25,7 @@ beforeAll(async () => {
   };
   ({ MasterKeychainCluster } = await import('../src/three/MasterKeychainCluster.js'));
   ({ chainElementAngle } = await import('../src/three/ClusterCharmBranch.js'));
-  ({ simulateLoop } = await import('../src/three/exporters.js'));
+  ({ simulateLoop, prepareClusterExportRoot } = await import('../src/three/exporters.js'));
 });
 
 function seeded(seed = 1) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
@@ -48,13 +54,81 @@ describe('chain geometry', () => {
   });
 });
 
+// Real rendered geometry: the character meshes' own bounding boxes, in world space.
+function worstOverlap(c) {
+  c.rootGroup.updateMatrixWorld(true);
+  const boxes = c.branches.map((b) => obbFromMesh(b.charmData.characterMesh));
+  const n = [new THREE.Vector3()][0];
+  let worst = 0;
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) worst = Math.max(worst, obbPenetration(boxes[i], boxes[j], n));
+  }
+  return worst * MM_PER_UNIT; // millimetres
+}
+
+describe('charm collision', () => {
+  const TOL_MM = 0.35;
+  it('hangs with no overlap at rest for every charm count and thickness', () => {
+    for (const thickness of [1, 2, 3]) {
+      for (let n = 2; n <= 5; n++) {
+        const c = new MasterKeychainCluster({ rng: seeded(3) });
+        for (let i = 0; i < n; i++) c.addCharm('x', thickness, [4, 5, 4, 6, 7][i]);
+        c.resetPose();
+        expect(worstOverlap(c)).toBeLessThan(TOL_MM);
+      }
+    }
+  });
+  it('never lets charms pass through each other while swinging', () => {
+    for (const n of [2, 3, 5]) {
+      const c = make(n);
+      let worst = 0;
+      for (let round = 0; round < 6; round++) {
+        c.applyImpulse(1);
+        c.applySpin(8);
+        for (let f = 0; f < 240; f++) {
+          c.update(1 / 60);
+          worst = Math.max(worst, worstOverlap(c));
+        }
+      }
+      expect(worst).toBeLessThan(TOL_MM * 4);
+    }
+  });
+  it('bakes clips without overlap', () => {
+    for (const kind of ['swing', 'spin']) {
+      const c = make(5);
+      const { record } = simulateLoop(c, kind);
+      const items = c.collisionItems();
+      let worst = 0;
+      const m = createMasterState();
+      for (const frame of record) {
+        Object.assign(m, frame.master);
+        items.forEach((it, i) => Object.assign(it.sim, frame.branches[i]));
+        worst = Math.max(worst, maxPenetration(m, items, c.spread));
+      }
+      expect(worst * MM_PER_UNIT).toBeLessThan(TOL_MM);
+    }
+  });
+  it('draws no selection box and exports no tint', () => {
+    const c = make(3);
+    c.branches[0].setHighlight('selected');
+    let lines = 0;
+    c.rootGroup.traverse((o) => { if (o.isLine || o.isLineSegments) lines++; });
+    expect(lines).toBe(0);
+    const root = prepareClusterExportRoot(c);
+    root.traverse((o) => { if (o.isMesh) expect(o.material.emissive?.getHex() ?? 0).toBe(0); });
+  });
+});
+
 describe('physics', () => {
-  it('rests exactly at the rest pose for 1, 3 and 5 charms', () => {
+  it('settles exactly on its rest pose for 1, 3 and 5 charms', () => {
     for (const n of [1, 3, 5]) {
       const c = make(n);
       c.wake();
       for (let f = 0; f < 600; f++) c.update(1 / 60);
-      for (const b of c.branches) expect(Math.abs(b.sim.thetaX) + Math.abs(b.sim.thetaZ)).toBe(0);
+      for (const b of c.branches) {
+        expect(b.sim.thetaX).toBe(b.restSim.thetaX);
+        expect(b.sim.thetaZ).toBe(b.restSim.thetaZ);
+      }
       expect(c.asleep).toBe(true);
     }
   });
