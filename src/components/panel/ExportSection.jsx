@@ -4,7 +4,8 @@ import { Seg } from './ui.jsx';
 const TRACKS = [
   { id: 'swing', label: 'Swing', title: 'Embed the simulated pendulum swing loop' },
   { id: 'spin', label: 'Spin 360°', title: 'Embed a 360° turntable loop with simulated charm response' },
-  { id: 'both', label: 'Both clips', title: 'Embed both the swing and the spin clip' },
+  { id: 'spinswing', label: 'Spin + Swing', title: 'Embed one seamless loop that spins 360° while it swings' },
+  { id: 'both', label: 'All clips', title: 'Embed the swing, spin and spin + swing clips as separate animations' },
 ];
 
 export default function ExportSection({
@@ -29,7 +30,7 @@ export default function ExportSection({
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Animation track">
+      <div className="grid grid-cols-2 gap-1" role="group" aria-label="Animation track">
         {TRACKS.map((t) => (
           <Seg
             key={t.id}

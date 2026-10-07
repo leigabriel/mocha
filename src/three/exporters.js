@@ -9,15 +9,21 @@ import { branchPosition, branchQuaternion, masterQuaternion, pivotQuaternion, ri
 
 const FPS = 30;
 const SIM_DT = 1 / 240;
-const WARMUP_PERIODS = 5;
+const WARMUP_PERIODS = 10;
 const CLOSE_FRAMES = 9; // frames blended back onto frame 0 so the loop is seamless
 
-export const ANIMATION_LABELS = { swing: 'SWING', spin: 'SPIN 360°', both: 'SWING + SPIN' };
+export const ANIMATION_LABELS = {
+  swing: 'SWING',
+  spin: 'SPIN 360°',
+  spinswing: 'SPIN + SWING',
+  both: 'ALL CLIPS',
+};
 
 // ------------------------------------------------------------------ baking
 
 const SWING_DURATION = 3.2;
 const SPIN_DURATION = 3.6;
+const SPIN_SWING_DURATION = 4.0;
 
 /** Scripted master motion for each clip; branches and charms are then *simulated*. */
 function swingMaster(t, out) {
@@ -42,7 +48,33 @@ function spinMaster(t, out) {
   out.omegaY = w;
 }
 
+/**
+ * Spin and swing at the same time. One loop is exactly one full turn and two swing
+ * cycles, so the first and last frames are the same pose and the loop never stutters.
+ * The swing is fixed in the world (the keychain turns on its own axis while it swings),
+ * so the tilt angles are rotated back by the current spin angle.
+ */
+function spinSwingMaster(t, out) {
+  const T = SPIN_SWING_DURATION;
+  const psi = (Math.PI * 2 * t) / T;
+  const dpsi = (Math.PI * 2) / T;
+  const w = (Math.PI * 2 * 2) / T;
+  const wx = 0.09 * Math.cos(w * t);
+  const wz = 0.13 * Math.sin(w * t);
+  const dwx = -0.09 * w * Math.sin(w * t);
+  const dwz = 0.13 * w * Math.cos(w * t);
+  const c = Math.cos(psi);
+  const s = Math.sin(psi);
+  out.thetaX = wx * c - wz * s;
+  out.thetaZ = wx * s + wz * c;
+  out.thetaY = psi;
+  out.omegaX = dwx * c - wx * s * dpsi - dwz * s - wz * c * dpsi;
+  out.omegaZ = dwx * s + wx * c * dpsi + dwz * c - wz * s * dpsi;
+  out.omegaY = dpsi;
+}
+
 const CLIPS = {
+  spinswing: { name: 'Mocha_Spin_Swing', duration: SPIN_SWING_DURATION, master: spinSwingMaster },
   swing: { name: 'Mocha_Swing', duration: SWING_DURATION, master: swingMaster },
   spin: { name: 'Mocha_Spin_360', duration: SPIN_DURATION, master: spinMaster },
 };
@@ -152,8 +184,10 @@ export function bakeAnimation(cluster, kind) {
 }
 
 function getClips(cluster, animType) {
-  if (animType === 'both') return [bakeAnimation(cluster, 'swing'), bakeAnimation(cluster, 'spin')];
-  return [bakeAnimation(cluster, animType === 'spin' ? 'spin' : 'swing')];
+  if (animType === 'both') {
+    return ['swing', 'spin', 'spinswing'].map((kind) => bakeAnimation(cluster, kind));
+  }
+  return [bakeAnimation(cluster, CLIPS[animType] ? animType : 'swing')];
 }
 
 // ------------------------------------------------------------ export scene

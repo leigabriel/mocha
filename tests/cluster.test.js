@@ -94,7 +94,7 @@ describe('charm collision', () => {
     }
   });
   it('bakes clips without overlap', () => {
-    for (const kind of ['swing', 'spin']) {
+    for (const kind of ['swing', 'spin', 'spinswing']) {
       const c = make(5);
       const { record } = simulateLoop(c, kind);
       const items = c.collisionItems();
@@ -107,6 +107,25 @@ describe('charm collision', () => {
       }
       expect(worst * MM_PER_UNIT).toBeLessThan(TOL_MM);
     }
+  });
+  it('spin + swing turns exactly 360 degrees and swings in the world frame', () => {
+    const c = make(3);
+    const { record, frames, clip } = simulateLoop(c, 'spinswing');
+    expect(clip.name).toBe('Mocha_Spin_Swing');
+    // yaw advances evenly by 360/frames each frame, then the last frame wraps onto the first
+    const step = (Math.PI * 2) / frames;
+    for (let k = 1; k < frames; k++) expect(record[k].master.thetaY - record[k - 1].master.thetaY).toBeCloseTo(step, 6);
+    expect(record[frames].master.thetaY).toBe(record[0].master.thetaY);
+    // world tilt (undo the yaw) must still swing: both axes move by several degrees
+    let maxX = 0, maxZ = 0;
+    for (const { master: m } of record) {
+      const wx = m.thetaX * Math.cos(m.thetaY) + m.thetaZ * Math.sin(m.thetaY);
+      const wz = -m.thetaX * Math.sin(m.thetaY) + m.thetaZ * Math.cos(m.thetaY);
+      maxX = Math.max(maxX, Math.abs(wx));
+      maxZ = Math.max(maxZ, Math.abs(wz));
+    }
+    expect(maxX).toBeGreaterThan(0.08);
+    expect(maxZ).toBeGreaterThan(0.12);
   });
   it('draws no selection box and exports no tint', () => {
     const c = make(3);
@@ -184,7 +203,7 @@ describe('model', () => {
   });
   it('baked loops close seamlessly and use finite angles', () => {
     const c = make(3);
-    for (const kind of ['swing', 'spin']) {
+    for (const kind of ['swing', 'spin', 'spinswing']) {
       const { record, frames } = simulateLoop(c, kind);
       const a = record[0], b = record[frames];
       expect(Math.abs(a.master.thetaX - b.master.thetaX)).toBeLessThan(1e-9);
