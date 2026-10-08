@@ -129,6 +129,17 @@ function Pack({ p }) {
   return (
     <Section title="04 Pack & backdrop" defaultOpen={false}>
       <Seg pressed={d.bag} onClick={() => p.updateGlobal({ bag: !d.bag })} className="min-h-[32px] w-full text-[11px] uppercase">Clear bag {d.bag ? 'on' : 'off'}</Seg>
+      {d.bag && (
+        <>
+          <Slider id="pk-shine" label="Plastic shine" value={d.bagShine} min={0} max={1} step={0.05} onChange={(bagShine) => p.updateGlobal({ bagShine })} />
+          <Slider id="pk-wrinkle" label="Plastic wrinkles" value={d.bagWrinkle} min={0} max={1.6} step={0.05} onChange={(bagWrinkle) => p.updateGlobal({ bagWrinkle })} />
+        </>
+      )}
+      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Lighting">
+        {['studio', 'soft', 'dramatic'].map((id) => (
+          <Seg key={id} pressed={d.lighting === id} onClick={() => p.updateGlobal({ lighting: id })} className="min-h-[32px] px-0 text-[11px] uppercase">{id}</Seg>
+        ))}
+      </div>
       <ColorField id="pk-paper" label="Stamp paper" value={d.paper} onChange={(paper) => p.updateGlobal({ paper })} />
       <div className="grid grid-cols-3 gap-1" role="group" aria-label="Backdrop">
         {Object.entries(BACKDROPS).map(([id, v]) => (
@@ -176,7 +187,7 @@ function Download({ p }) {
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         {Object.entries(FORMAT_INFO).map(([id, f]) => (
-          <button key={id} type="button" disabled={p.busy} onClick={() => p.handleExport(id)} title={f.note} className="hud-btn min-h-[40px] text-[11px] font-bold uppercase">{f.label} 3D model</button>
+          <button key={id} type="button" disabled={p.busy} onClick={() => p.handleExport(id)} title={f.note} className="hud-btn min-h-[40px] text-[11px] font-bold uppercase">{f.label} 3D model{id === 'gltf' ? ' ★' : ''}</button>
         ))}
       </div>
       <p className="text-soft font-mono text-[11px]">The 3D model carries the chosen loop. Images are saved at the current view and backdrop. Built in {p.stats.ms} ms.</p>

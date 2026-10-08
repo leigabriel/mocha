@@ -3,8 +3,45 @@ import { stampSize } from './geometry.js';
 
 /** Paints the printed side of a stamp or the header card onto a canvas (1 px = 1 / ppm mm). */
 
-const PPM = 16;
+const PPM = 24; // pixels per mm on stamps
+const PPM_CARD = 20;
 const hexToRgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+
+let grainTile = null;
+/** Fine paper grain: a small tile of light-grey noise multiplied over the print. */
+function grainPattern(ctx) {
+  if (!grainTile) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 192;
+    const g = c.getContext('2d');
+    const img = g.createImageData(192, 192);
+    let a = 1234567;
+    const rnd = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 236 + Math.round(rnd() * 19);
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    grainTile = c;
+  }
+  return ctx.createPattern(grainTile, 'repeat');
+}
+
+function addGrain(ctx, w, h, strength = 1) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha = 0.55 * strength;
+  ctx.fillStyle = grainPattern(ctx);
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
 
 function canvas(w, h) {
   const c = document.createElement('canvas');
@@ -24,6 +61,8 @@ function drawCover(ctx, img, x, y, w, h, zoom, panX, panY) {
   }
   dw *= zoom;
   dh *= zoom;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   const ox = ((dw - w) / 2) * panX;
   const oy = ((dh - h) / 2) * panY;
   ctx.drawImage(img, x + (w - dw) / 2 - ox, y + (h - dh) / 2 - oy, dw, dh);
@@ -55,27 +94,34 @@ function applyLook(ctx, w, h, look, ink, paper) {
     ctx.putImageData(img, 0, 0);
     return;
   }
-  // halftone: dots on the paper, dark = big
-  const cell = Math.max(6, Math.round(PPM * 0.5));
+  // halftone: a 45 degree screen of round dots on the paper, dark = big
+  const cell = Math.max(5, Math.round(PPM * 0.3));
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = ink;
-  for (let cy = 0; cy < h; cy += cell) {
-    for (let cx = 0; cx < w; cx += cell) {
+  const cos = Math.SQRT1_2;
+  const reach = Math.ceil((w + h) / cell);
+  const half = Math.max(1, Math.floor(cell / 2));
+  for (let v = -reach; v <= reach; v++) {
+    for (let u = -reach; u <= reach; u++) {
+      const x = (u - v) * cell * cos;
+      const y = (u + v) * cell * cos;
+      if (x < -cell || y < -cell || x > w + cell || y > h + cell) continue;
       let sum = 0;
       let cnt = 0;
-      for (let y = cy; y < Math.min(h, cy + cell); y += 2) {
-        for (let x = cx; x < Math.min(w, cx + cell); x += 2) {
-          const i = (y * w + x) * 4;
+      for (let yy = Math.max(0, Math.floor(y - half)); yy < Math.min(h, Math.ceil(y + half)); yy += 2) {
+        for (let xx = Math.max(0, Math.floor(x - half)); xx < Math.min(w, Math.ceil(x + half)); xx += 2) {
+          const i = (yy * w + xx) * 4;
           sum += lum(d[i], d[i + 1], d[i + 2]);
           cnt++;
         }
       }
-      const dark = 1 - sum / Math.max(1, cnt);
-      const r = cell * 0.5 * Math.sqrt(Math.min(1, dark * 1.1));
-      if (r > 0.4) {
+      if (!cnt) continue;
+      const dark = 1 - sum / cnt;
+      const r = cell * 0.74 * Math.sqrt(Math.min(1, dark * 1.05));
+      if (r > 0.5) {
         ctx.beginPath();
-        ctx.arc(cx + cell / 2, cy + cell / 2, r, 0, Math.PI * 2);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -160,12 +206,12 @@ export function stampFace(stamp, image, paper) {
   ctx.drawImage(tmp, box.x * sx, box.y * sy, bw, bh);
   ctx.restore();
 
-  // thin keyline round the picture, like printed stamps
+  // the faintest keyline where the print meets the paper
   ctx.save();
   ctx.beginPath();
   path();
   ctx.lineWidth = Math.max(1, sx * 0.12);
-  ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
   ctx.stroke();
   ctx.restore();
 
@@ -196,20 +242,71 @@ export function stampFace(stamp, image, paper) {
       ctx.fillText(caption, (w / 2) * sx, (h - b - capH / 2 + 0.3) * sy);
     }
   }
+  addGrain(ctx, out.width, out.height);
   return out;
+}
+
+/** Original placeholder mark: speed stripes and the initials of the first line. */
+function placeholderLogo(ctx, x, y, w, h, ink, label, font) {
+  ctx.save();
+  ctx.fillStyle = ink;
+  const skew = 0.32;
+  const bars = [0.0, 0.2, 0.4];
+  bars.forEach((o, i) => {
+    const by = y + h * (0.12 + o);
+    const bh = h * (0.13 - i * 0.012);
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.02 + i * 2, by + bh);
+    ctx.lineTo(x + w * 0.02 + i * 2 + bh * skew * 2, by);
+    ctx.lineTo(x + w * (0.5 - i * 0.04), by);
+    ctx.lineTo(x + w * (0.5 - i * 0.04) - bh * skew * 2, by + bh);
+    ctx.closePath();
+    ctx.fill();
+  });
+  const letters = (label.match(/[A-Za-z0-9]/g) ?? ['M']).slice(0, 2).join('').toUpperCase();
+  ctx.font = `italic 900 ${h * 0.92}px ${font}`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'right';
+  ctx.fillText(letters, x + w, y + h * 0.9);
+  ctx.restore();
 }
 
 /** Printed face of the header card. */
 export function cardFace(card, logo, icon) {
   const w = PACK.cardW;
   const h = PACK.cardH;
-  const out = canvas(w * PPM, h * PPM);
+  const P = PPM_CARD;
+  const out = canvas(w * P, h * P);
   const ctx = out.getContext('2d');
   ctx.fillStyle = card.paper;
   ctx.fillRect(0, 0, out.width, out.height);
-  // faint fold line under the hole, like a bag topper
-  ctx.fillStyle = 'rgba(0,0,0,0.05)';
-  ctx.fillRect(0, (h - 1.1) * PPM, out.width, PPM * 0.5);
+  // soft light falloff across the topper, like coated board
+  const sheen = ctx.createLinearGradient(0, 0, 0, out.height);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.35)');
+  sheen.addColorStop(0.55, 'rgba(255,255,255,0)');
+  sheen.addColorStop(1, 'rgba(0,0,0,0.05)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, out.width, out.height);
+
+  // reinforcement ring round the hanging hole
+  if (card.hole) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.13)';
+    ctx.lineWidth = 0.25 * P;
+    ctx.beginPath();
+    ctx.arc((w / 2) * P, 5.2 * P, 2.9 * P, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // crimped fold line near the bottom edge: a highlight over a soft shadow
+  const foldY = (h - 3.6) * P;
+  const fold = ctx.createLinearGradient(0, foldY - 0.9 * P, 0, foldY + 1.6 * P);
+  fold.addColorStop(0, 'rgba(0,0,0,0)');
+  fold.addColorStop(0.35, 'rgba(0,0,0,0.11)');
+  fold.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = fold;
+  ctx.fillRect(0, foldY - 0.9 * P, out.width, 2.5 * P);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillRect(0, foldY - 0.9 * P, out.width, 0.22 * P);
 
   const font = HEADER_FONTS.find((f) => f.id === card.font) ?? HEADER_FONTS[0];
   const contain = (img, x, y, bw, bh) => {
@@ -217,30 +314,35 @@ export function cardFace(card, logo, icon) {
     const k = Math.min(bw / img.w, bh / img.h);
     const dw = img.w * k;
     const dh = img.h * k;
-    ctx.drawImage(img.canvas, (x + (bw - dw) / 2) * PPM, (y + (bh - dh) / 2) * PPM, dw * PPM, dh * PPM);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img.canvas, (x + (bw - dw) / 2) * P, (y + (bh - dh) / 2) * P, dw * P, dh * P);
   };
-  const logoBox = { x: 6, y: 5, w: 34, h: 19 };
+  const logoBox = { x: 6, y: 6.5, w: 34, h: 16 };
   if (logo) contain(logo, logoBox.x, logoBox.y, logoBox.w, logoBox.h);
-  else {
-    ctx.fillStyle = card.ink;
-    ctx.globalAlpha = 0.14;
-    ctx.fillRect(logoBox.x * PPM, logoBox.y * PPM, logoBox.w * PPM, logoBox.h * PPM);
-    ctx.globalAlpha = 1;
-  }
-  contain(icon, w - 6 - 20, 5, 20, 19);
+  else placeholderLogo(ctx, logoBox.x * P, logoBox.y * P, logoBox.w * P, logoBox.h * P, card.ink, card.line1, font.css);
+  contain(icon, w - 6 - 18, 6.5, 18, 16);
 
-  const textX = 44;
-  const maxW = w - textX - (icon ? 30 : 8);
+  const textX = 46;
+  const maxW = w - textX - (icon ? 30 : 10);
   const lines = [card.line1, card.line2, card.line3].filter((l) => l.trim());
-  const lineH = 6.2;
-  const top = 9 + (3 - lines.length) * (lineH / 2);
+  const lineH = 6.4;
+  const top = 8.2 + (3 - lines.length) * (lineH / 2);
   ctx.fillStyle = card.ink;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   lines.forEach((line, i) => {
-    fitText(ctx, line.toUpperCase(), font.css, font.weight, maxW * PPM, lineH * 0.82 * PPM);
-    ctx.fillText(line.toUpperCase(), textX * PPM, (top + (i + 1) * lineH - 1) * PPM);
+    const text = line.toUpperCase();
+    const px = fitText(ctx, text, font.css, font.weight, maxW * P, lineH * 0.8 * P);
+    if ('letterSpacing' in ctx) {
+      ctx.letterSpacing = `${px * 0.06}px`;
+      // re-fit once the tracking is applied
+      const w2 = ctx.measureText(text).width;
+      if (w2 > maxW * P) ctx.font = `${font.weight} ${(px * maxW * P) / w2}px ${font.css}`;
+    }
+    ctx.fillText(text, textX * P, (top + (i + 1) * lineH - 1.2) * P);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   });
+  addGrain(ctx, out.width, out.height, 0.6);
   return out;
 }
 

@@ -6,7 +6,7 @@ export const PACK_LIMITS = Object.freeze({
   texMax: 2048, // long side of a decoded image, in pixels
   scale: [0.5, 1.8],
   border: [0.6, 6],
-  pitch: [1.8, 4.5],
+  pitch: [1.6, 4.5],
   zoom: [1, 4],
   captionLength: 40,
   lineLength: 44,
@@ -16,11 +16,11 @@ export const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/avif,imag
 export const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif|bmp|svg)$/i;
 
 export const STAMP_SHAPES = [
-  { id: 'portrait', label: 'Portrait', w: 38, h: 48 },
-  { id: 'landscape', label: 'Landscape', w: 50, h: 38 },
-  { id: 'square', label: 'Square', w: 42, h: 42 },
-  { id: 'circle', label: 'Circle', w: 44, h: 44 },
-  { id: 'wedge', label: 'Wedge', w: 58, h: 46 },
+  { id: 'portrait', label: 'Portrait', w: 42, h: 54 },
+  { id: 'landscape', label: 'Landscape', w: 56, h: 42 },
+  { id: 'square', label: 'Square', w: 47, h: 47 },
+  { id: 'circle', label: 'Circle', w: 48, h: 48 },
+  { id: 'wedge', label: 'Wedge', w: 64, h: 50 },
 ];
 export const SHAPE_IDS = STAMP_SHAPES.map((s) => s.id);
 
@@ -48,6 +48,13 @@ export const BACKDROPS = {
   clear: { label: 'Clear', top: null, bottom: null },
 };
 
+export const LIGHTING = {
+  studio: { label: 'Studio', env: 1, key: 0.9 },
+  soft: { label: 'Soft', env: 0.85, key: 0.4 },
+  dramatic: { label: 'Dramatic', env: 1.25, key: 1.5 },
+};
+export const LIGHTING_IDS = Object.keys(LIGHTING);
+
 // Pack layout (mm). The card hangs above the bag; stamps lie between the bag sheets.
 export const PACK = Object.freeze({
   W: 148,
@@ -56,9 +63,9 @@ export const PACK = Object.freeze({
   cardW: 150,
   cardH: 30,
   cardCy: 76,
-  area: { x: 60, y0: -78, y1: 48 }, // where stamps may sit (centres)
+  area: { x: 62, y0: -80, y1: 50 }, // where stamps may sit (centres)
   paperT: 0.2,
-  zStep: 0.34,
+  zStep: 0.4,
 });
 
 export const FPS = 30;

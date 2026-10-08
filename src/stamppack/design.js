@@ -1,5 +1,5 @@
 import { clamp } from '../utils/helpers.js';
-import { BACKDROPS, HEADER_FONT_IDS, LOOK_IDS, PACK, PACK_LIMITS as L, SHAPE_IDS, STAMP_SHAPES } from './constants.js';
+import { BACKDROPS, HEADER_FONT_IDS, LIGHTING_IDS, LOOK_IDS, PACK, PACK_LIMITS as L, SHAPE_IDS, STAMP_SHAPES } from './constants.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const color = (v, fallback) => (typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : fallback);
@@ -34,7 +34,7 @@ export function defaultStamp(overrides = {}) {
     x: 0,
     y: 0,
     border: 2.4,
-    pitch: 3,
+    pitch: 2.5,
     look: 'original',
     ink: '#d92f4e',
     zoom: 1,
@@ -66,6 +66,9 @@ export function defaultDesign() {
     seed: 7,
     paper: '#f8f5ee',
     bag: true,
+    bagShine: 0.85,
+    bagWrinkle: 1,
+    lighting: 'studio',
     backdrop: 'black',
     card: defaultCard(),
     stamps: [],
@@ -125,6 +128,9 @@ export function sanitizeDesign(raw = {}) {
     seed: Math.round(num(raw.seed, [1, 999999], d.seed)),
     paper: color(raw.paper, d.paper),
     bag: raw.bag !== false,
+    bagShine: num(raw.bagShine, [0, 1], d.bagShine),
+    bagWrinkle: num(raw.bagWrinkle, [0, 1.6], d.bagWrinkle),
+    lighting: oneOf(raw.lighting, LIGHTING_IDS, d.lighting),
     backdrop: oneOf(raw.backdrop, Object.keys(BACKDROPS), d.backdrop),
     card: sanitizeCard(raw.card),
     stamps,
@@ -133,8 +139,8 @@ export function sanitizeDesign(raw = {}) {
 
 /** Only the look-and-feel is saved between visits; uploaded pictures stay in the browser session. */
 export function serializeSettings(design) {
-  const { card, paper, bag, backdrop, seed } = design;
-  return JSON.stringify({ v: 1, seed, paper, bag, backdrop, card: { ...card, logoId: '', iconId: '' } });
+  const { card, paper, bag, bagShine, bagWrinkle, lighting, backdrop, seed } = design;
+  return JSON.stringify({ v: 1, seed, paper, bag, bagShine, bagWrinkle, lighting, backdrop, card: { ...card, logoId: '', iconId: '' } });
 }
 
 export function parseSettings(textValue) {
@@ -170,10 +176,10 @@ export function scatter(stamps, seed) {
   return stamps.map((s, i) => {
     const [c, r] = cells[i];
     const info = shapeInfo(s.shape);
-    const fit = clamp((Math.min(cw / info.w, ch / info.h) * 1.35), 0.55, 1.15);
-    const x = -ax + cw * (c + 0.5) + (rand() - 0.5) * cw * 0.35;
-    const y = y1 - ch * (r + 0.5) + (rand() - 0.5) * ch * 0.35;
-    const tilt = (6 + rand() * 18) * (rand() < 0.5 ? -1 : 1);
+    const fit = clamp(Math.min(cw / info.w, ch / info.h) * 1.55, 0.6, 1.2);
+    const x = -ax + cw * (c + 0.5) + (rand() - 0.5) * cw * 0.5;
+    const y = y1 - ch * (r + 0.5) + (rand() - 0.5) * ch * 0.5;
+    const tilt = (3 + rand() * 15) * (rand() < 0.5 ? -1 : 1);
     return sanitizeStamp({ ...s, x, y, rot: tilt, scale: fit });
   });
 }

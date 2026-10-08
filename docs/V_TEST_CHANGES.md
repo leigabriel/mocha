@@ -73,3 +73,9 @@ A third tab that turns any pictures you upload into a bagged postage-stamp colle
 - **Downloads:** PNG (1x to 4x, optional transparent background), JPG, and GLB or GLTF 3D models with embedded textures and the chosen loop (still, spin, sway or both). Units are metres in the 3D files.
 
 Notes: the 3D model is thin paper geometry with the printed pictures as textures (one JPEG per stamp). Only the look and feel (header text, colours, bag, backdrop) is remembered between visits; the pictures are not. Source: `src/stamppack/`, UI: `src/components/stamppack/`.
+
+## Stamp Pack refinement
+- Clear bag is now an alpha-blended glossy film (clearcoat, crease streaks, frosted ribbed seal band, welded seams) so stamps stay crisp; no transmission whitewash.
+- Higher-resolution stamp and card textures with paper grain and a paper normal map; contact shadows under each stamp; denser, slightly tilted layout; drag a stamp to move it.
+- New controls: plastic shine, plastic wrinkles, lighting preset (studio / soft / dramatic).
+- glTF is the recommended 3D export: it embeds pictures, key/fill/rim lights, a camera and the spin loop. GLB carries the same data but some viewers ignore lights; neither can embed an environment map.

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { downloadBlob } from '../utils/helpers.js';
 import { createTagStage } from '../tagbuilder/tagStage.js';
 import * as packAnimator from '../stamppack/animation.js';
-import { BACKDROPS, PACK_LIMITS as L } from '../stamppack/constants.js';
+import { BACKDROPS, LIGHTING, PACK_LIMITS as L } from '../stamppack/constants.js';
 import { buildPack } from '../stamppack/builder.js';
 import {
   defaultDesign,
@@ -70,6 +70,7 @@ export function useStampPack(active) {
   const [transparent, setTransparent] = useState(false);
   const [stats, setStats] = useState({ ms: 0, triangles: 0, stamps: 0 });
 
+  const dragRef = useRef(() => {});
   const designRef = useRef(design);
   const imagesRef = useRef(images);
   const animationRef = useRef('off');
@@ -113,10 +114,13 @@ export function useStampPack(active) {
     try {
       stage = createTagStage(containerRef.current, {
         onPick: (id) => setSelectedId(id),
+        onDrag: (id, dx, dy) => dragRef.current(id, dx, dy),
+        environment: 'pack',
         animator: packAnimator,
         defaultView: DEFAULT_VIEW,
         backgrounds: BACKDROPS,
         toneMapping: THREE.NeutralToneMapping,
+        sceneBackground: false,
       });
     } catch (err) {
       console.error(err);
@@ -124,6 +128,7 @@ export function useStampPack(active) {
     }
     stageRef.current = stage;
     stage.setBackground(designRef.current.backdrop);
+    stage.setLighting(LIGHTING[designRef.current.lighting]);
     stage.setAnimation(animationRef.current === 'off' ? null : animationRef.current);
     return () => {
       stage.dispose();
@@ -140,6 +145,10 @@ export function useStampPack(active) {
   useEffect(() => {
     stageRef.current?.setBackground(design.backdrop);
   }, [design.backdrop, active]);
+
+  useEffect(() => {
+    stageRef.current?.setLighting(LIGHTING[design.lighting]);
+  }, [design.lighting, active]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -210,6 +219,19 @@ export function useStampPack(active) {
 
   const updateCard = useCallback((patch) => setDesign((d) => ({ ...d, card: sanitizeCard({ ...d.card, ...patch }) })), [setDesign]);
   const updateGlobal = useCallback((patch) => setDesign((d) => sanitizeDesign({ ...d, ...patch })), [setDesign]);
+
+  // dragging a stamp in the 3D view: move the live mesh at once, then commit to the design
+  useEffect(() => {
+    dragRef.current = (id, dx, dy) => {
+      const holder = buildRef.current?.group.getObjectByName(`StampPos_${id}`);
+      if (holder) {
+        holder.position.x += dx;
+        holder.position.y += dy;
+        stageRef.current?.invalidate();
+      }
+      setDesign((d) => ({ ...d, stamps: d.stamps.map((s) => (s.id === id ? sanitizeStamp({ ...s, x: s.x + dx, y: s.y + dy }) : s)) }));
+    };
+  }, [setDesign]);
 
   const removeStamp = useCallback((id) => {
     setDesign((d) => ({ ...d, stamps: d.stamps.filter((s) => s.id !== id) }));

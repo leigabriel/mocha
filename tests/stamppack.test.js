@@ -2,6 +2,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 
+// jsdom has no canvas: give the builder's procedural textures a stub 2D context
+HTMLCanvasElement.prototype.getContext = function getContext() {
+  const w = this.width || 1;
+  const h = this.height || 1;
+  const noop = () => {};
+  return new Proxy({ canvas: this }, {
+    get: (t, k) => {
+      if (k in t) return t[k];
+      if (k === 'createImageData' || k === 'getImageData') return () => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h });
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop: noop });
+      return noop;
+    },
+    set: (t, k, v) => { t[k] = v; return true; },
+  });
+};
+HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,';
+
 vi.mock('../src/stamppack/faces.js', () => ({
   cachedFace: (_k, paint) => paint(),
   stampFace: () => document.createElement('canvas'),
