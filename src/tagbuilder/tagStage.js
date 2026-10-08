@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BACKGROUNDS } from './constants.js';
-import { CLIPS, poseAt, poseRest } from './animation.js';
+import * as tagAnimator from './animation.js';
 
 const FOV = 28;
 const HOVER = { color: 0xffffff, intensity: 0.12 };
@@ -33,11 +33,16 @@ function buildStudioEnvironment() {
  * Orbit viewer for the Tag Builder. Render-on-demand; the model is swapped with
  * `setModel`. Picking and hover report the tag id found under the pointer.
  */
-export function createTagStage(container, { onPick = () => {}, onHover = () => {} } = {}) {
+export function createTagStage(
+  container,
+  { onPick = () => {}, onHover = () => {}, animator = tagAnimator, defaultView = [-0.7, 0.1, 0.7], backgrounds = BACKGROUNDS, toneMapping = THREE.ACESFilmicToneMapping } = {}
+) {
+  const { CLIPS, poseAt, poseRest } = animator;
+  const resolveBg = (v) => (v && typeof v === 'object' ? v : backgrounds[v] ?? Object.values(backgrounds)[0]);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 4000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = toneMapping;
   renderer.toneMappingExposure = 1.05;
   if ('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale = 1;
   const canvas = renderer.domElement;
@@ -93,7 +98,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     const dir = view
       ? new THREE.Vector3(...view).normalize()
       : camera.position.clone().sub(controls.target).normalize();
-    if (!Number.isFinite(dir.x) || dir.lengthSq() === 0) dir.set(-0.7, 0.1, 0.7).normalize();
+    if (!Number.isFinite(dir.x) || dir.lengthSq() === 0) dir.set(...defaultView).normalize();
     controls.target.copy(center);
     camera.position.copy(center).addScaledVector(dir, dist);
     camera.near = Math.max(0.5, dist / 80);
@@ -108,17 +113,18 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
   function applyHighlights() {
     if (!model) return;
     model.traverse((o) => {
-      if (!o.isMesh || !o.material || o.material.userData.shared) return;
+      if (!o.isMesh || !o.material) return;
       const id = o.userData.tagId;
       const state = id && id === selectedId ? SELECT : id && id === hoverId ? HOVER : null;
-      const m = o.material;
-      if (!m.emissive) return;
-      if (state) {
-        m.emissive.setHex(state.color);
-        m.emissiveIntensity = state.intensity;
-      } else {
-        m.emissive.setHex(0x000000);
-        m.emissiveIntensity = 1;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.userData.shared || !m.emissive) continue;
+        if (state) {
+          m.emissive.setHex(state.color);
+          m.emissiveIntensity = state.intensity;
+        } else {
+          m.emissive.setHex(0x000000);
+          m.emissiveIntensity = 1;
+        }
       }
     });
     invalidate();
@@ -149,7 +155,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
   }
 
   function setBackground(id) {
-    const bg = BACKGROUNDS[id] ?? BACKGROUNDS.studio;
+    const bg = resolveBg(id);
     if (bg.top) {
       container.style.background = `linear-gradient(180deg, ${bg.top}, ${bg.bottom})`;
     } else {
@@ -244,7 +250,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
    * the long side). With a background, the backdrop gradient is painted behind it.
    * Returns a PNG blob.
    */
-  async function snapshot({ scale = 3, transparent = false, bgId = 'studio' } = {}) {
+  async function snapshot({ scale = 3, transparent = false, bgId = 'studio', format = 'png', quality = 0.92 } = {}) {
     const size = renderer.getSize(new THREE.Vector2());
     const prevRatio = renderer.getPixelRatio();
     const factor = Math.min(scale, 4096 / Math.max(size.x, size.y));
@@ -258,20 +264,28 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     out.width = w;
     out.height = h;
     const ctx = out.getContext('2d');
-    const bg = BACKGROUNDS[bgId] ?? BACKGROUNDS.studio;
-    if (!transparent && bg.top) {
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, bg.top);
-      grad.addColorStop(1, bg.bottom);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
+    const jpeg = format === 'jpeg';
+    const bg = resolveBg(bgId);
+    if (jpeg || (!transparent && bg.top)) {
+      if (!bg.top) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, bg.top);
+        grad.addColorStop(1, bg.bottom);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
     }
     ctx.drawImage(canvas, 0, 0, w, h);
 
     renderer.setPixelRatio(prevRatio);
     renderer.setSize(size.x, size.y, false);
     invalidate();
-    return new Promise((resolve, reject) => out.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG failed'))), 'image/png'));
+    return new Promise((resolve, reject) =>
+      out.toBlob((b) => (b ? resolve(b) : reject(new Error('Image export failed'))), jpeg ? 'image/jpeg' : 'image/png', quality)
+    );
   }
 
   function dispose() {

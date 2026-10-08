@@ -62,6 +62,10 @@ Whether it's a smiley face, animal, food item, or a complex multi-byte/ZWJ emoji
 
 The **Tag Builder** tab generates an editable, product-style keychain (carabiner, keys, chains and up to six text or SVG tags) in your browser and downloads it as GLB, GLTF, OBJ, STL, PLY, USDZ, 3MF or a Blender script, plus a PNG render. See `docs/V_TEST_CHANGES.md` for details and limits.
 
+## 🖼️ Stamp Pack
+
+The **Stamp Pack** tab turns the pictures you upload (JPG, PNG, WebP, GIF, AVIF, BMP, SVG) into a bagged postage-stamp collection with an editable header card. Download it as PNG, JPG, or a GLB / GLTF 3D model with a spin animation. See `docs/V_TEST_CHANGES.md`.
+
 ## ⌨️ Keyboard, undo and sharing
 
 - **Viewport keys** (focus the 3D view): `←` `→` `↑` `↓` swing, `Space` push, `S` spin, `R` rest, `1`–`5` or `[` `]` select a charm.

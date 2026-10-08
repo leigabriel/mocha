@@ -60,3 +60,16 @@ A second top-level tab next to "Emoji Charms". It builds a keychain like a produ
 - Units are millimetres; GLB/GLTF/USDZ are exported in metres.
 
 Known limits: the animation is a scripted, contact-checked motion, not a full physics simulation like the Emoji tab; USDZ, OBJ, STL, PLY and 3MF stay static. the "Render image" is a raster snapshot, not a path-traced render. 3MF/STL are made of overlapping parts, so a slicer may need "merge overlapping parts". The Blender script has not been run in real Blender. With chain length 0, a key plus several tags can still touch (the panel warns). Source: `src/tagbuilder/`, UI: `src/components/tagbuilder/`.
+
+## Stamp Pack tab (new)
+
+A third tab that turns any pictures you upload into a bagged postage-stamp collection, like a collectible pack: a header card with a hanging hole, a clear bag and stamps with perforated edges, loosely scattered and overlapping.
+
+- **Upload:** JPG, PNG, WebP, GIF (first frame), AVIF, BMP and SVG, by button or by dropping files on the 3D view. Up to 12 stamps, 10 MB each. Pictures are decoded in the browser and never uploaded. (HEIC is not supported by most browsers.)
+- **Each stamp:** portrait, landscape, square, circle or wedge; size, rotation, position, white border, perforation size; print look (original, halftone dots, duotone, mono) with an ink colour; zoom and pan of the picture; an optional caption; replace picture; bring to front or send to back; copy; delete. Click a stamp in the 3D view to select it.
+- **Header card:** three text lines (mono, serif or sans), text and card colours, a logo and an icon upload, hanging hole on or off, card on or off.
+- **Pack:** clear bag on or off, stamp paper colour, backdrop (black, charcoal, paper, sage, sky, clear), Shuffle (new seeded scatter), sample stamps (original artwork drawn in the app).
+- **Animation:** Spin 360° and Sway, played live.
+- **Downloads:** PNG (1x to 4x, optional transparent background), JPG, and GLB or GLTF 3D models with embedded textures and the chosen loop (still, spin, sway or both). Units are metres in the 3D files.
+
+Notes: the 3D model is thin paper geometry with the printed pictures as textures (one JPEG per stamp). Only the look and feel (header text, colours, bag, backdrop) is remembered between visits; the pictures are not. Source: `src/stamppack/`, UI: `src/components/stamppack/`.
