@@ -47,3 +47,15 @@ Numbers refer to the findings in `MOCHA_ANALYSIS.md`. "Verified" says how each f
 - Hardware was rescaled (ring ≈ 40 mm across, links and jump rings larger) so it reads at real-world proportions.
 - Charm slots were re-laid-out: the centre charm is frontmost and the four others sit behind it. The original fifth slot ("front-right accent") is now a rear accent.
 - Rest-pose and exported clips are different from v0 by design (finding 3 and 20).
+
+## Tag Builder tab (new)
+
+A second top-level tab next to "Emoji Charms". It builds a keychain like a product render, procedurally in the browser (no server, no account):
+
+- **Hardware:** anodized carabiner with a locking sleeve (three colours), split ring, 0–3 keys, jump rings and chains (0–4), four metals.
+- **Tags (up to 6):** bar, rounded, pill, circle, hex, cube or free cut (outline follows the text or an uploaded SVG). Raised text in four bundled fonts or an uploaded font, up to two outline rings, clear acrylic / gloss / matte / rubber / metal materials, per-tag hang angle.
+- **Editable:** click a tag in the 3D view or the list; undo/redo, share link (`#t=`), presets, autosave in `localStorage`.
+- **Downloads:** GLB, GLTF, OBJ, STL, PLY, USDZ, 3MF, and a Blender Python script (embeds the GLB and sets up lights, backdrop and Cycles). Also a 3x supersampled PNG render, optionally transparent.
+- Units are millimetres; GLB/GLTF/USDZ are exported in metres.
+
+Known limits: the "Render image" is a raster snapshot, not a path-traced render. 3MF/STL are made of overlapping parts, so a slicer may need "merge overlapping parts". The Blender script has not been run in real Blender. With chain length 0, a key plus several tags can still touch (the panel warns). Source: `src/tagbuilder/`, UI: `src/components/tagbuilder/`.
