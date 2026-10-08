@@ -1,5 +1,6 @@
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+import { bakeClips } from './animation.js';
 import { USDZExporter } from 'three/examples/jsm/exporters/USDZExporter.js';
 import { strToU8, zipSync } from 'three/examples/jsm/libs/fflate.module.js';
 import { buildKeychain } from './builder.js';
@@ -26,9 +27,9 @@ export function prepareExportRoot(design, unitScale = 1) {
 
 const toBlob = (data, mime) => new Blob([data], { type: mime });
 
-function gltfData(root, binary) {
+function gltfData(root, binary, animations = []) {
   return new Promise((resolve, reject) => {
-    new GLTFExporter().parse(root, resolve, reject, { binary, onlyVisible: true });
+    new GLTFExporter().parse(root, resolve, reject, { binary, onlyVisible: true, animations });
   });
 }
 
@@ -227,7 +228,7 @@ export function meshHealth(root) {
 // ------------------------------------------------------------------- driver
 
 /** Exports `design` in `format`. Returns { blob, filename, info }. */
-export async function exportModel(format, design, { stamp = Date.now() } = {}) {
+export async function exportModel(format, design, { stamp = Date.now(), anim = 'none' } = {}) {
   const info = FORMAT_INFO[format];
   if (!info) throw new Error(`Unsupported format: ${format}`);
   const metres = format === 'glb' || format === 'gltf' || format === 'usdz';
@@ -237,10 +238,10 @@ export async function exportModel(format, design, { stamp = Date.now() } = {}) {
     let data;
     switch (format) {
       case 'glb':
-        data = await gltfData(kc.group, true);
+        data = await gltfData(kc.group, true, bakeClips(kc, anim));
         break;
       case 'gltf':
-        data = JSON.stringify(await gltfData(kc.group, false), null, 2);
+        data = JSON.stringify(await gltfData(kc.group, false, bakeClips(kc, anim)), null, 2);
         break;
       case 'obj':
         data = buildOBJ(kc.group);
@@ -258,7 +259,9 @@ export async function exportModel(format, design, { stamp = Date.now() } = {}) {
         data = build3MF(kc.group).data;
         break;
       case 'blend': {
-        const glb = await gltfData(prepareExportRoot(design, 0.001).group, true);
+        const animated = prepareExportRoot(design, 0.001);
+        const glb = await gltfData(animated.group, true, bakeClips(animated, anim));
+        animated.dispose();
         data = blenderScript(design, glb, kc.bounds);
         break;
       }

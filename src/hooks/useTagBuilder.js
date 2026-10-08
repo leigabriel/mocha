@@ -44,13 +44,19 @@ export function useTagBuilder(active) {
   const [fontTick, setFontTick] = useState(0);
   const [stats, setStats] = useState({ overlap: 0, triangles: 0, health: null, ms: 0, sizeMm: { w: 0, h: 0, d: 0 } });
   const [busy, setBusy] = useState(false);
+  const [animation, setAnimationState] = useState('off');
+  const [exportAnim, setExportAnim] = useState('swing');
   const [historyFlags, setHistoryFlags] = useState({ canUndo: false, canRedo: false });
 
   const designRef = useRef(design);
   const selectedIdRef = useRef(selectedId);
+  const animationRef = useRef('off');
+  const exportAnimRef = useRef('swing');
   useEffect(() => {
     designRef.current = design;
     selectedIdRef.current = selectedId;
+    animationRef.current = animation;
+    exportAnimRef.current = exportAnim;
   });
   const selected = design.tags.find((t) => t.id === selectedId) ?? null;
 
@@ -136,6 +142,7 @@ export function useTagBuilder(active) {
     stageRef.current = stage;
     stage.setBackground(designRef.current.bg);
     stage.setSelected(selectedIdRef.current);
+    stage.setAnimation(animationRef.current === 'off' ? null : animationRef.current);
     return () => {
       stage.dispose();
       stageRef.current = null;
@@ -292,7 +299,7 @@ export function useTagBuilder(active) {
     showToast(`PACKING ${info.label.toUpperCase()}...`);
     try {
       await new Promise((r) => setTimeout(r, 30)); // let the toast paint first
-      const { blob, filename } = await exportModel(format, designRef.current);
+      const { blob, filename } = await exportModel(format, designRef.current, { anim: exportAnimRef.current });
       downloadBlob(blob, filename);
       showToast(`EXPORTED ${info.label.toUpperCase()}`);
     } catch (err) {
@@ -342,6 +349,11 @@ export function useTagBuilder(active) {
     }
   }, [showToast]);
 
+  const setAnimation = useCallback((kind) => {
+    setAnimationState(kind);
+    stageRef.current?.setAnimation(kind === 'off' ? null : kind);
+  }, []);
+
   const resetView = useCallback(() => stageRef.current?.fit([-0.7, 0.1, 0.7]), []);
 
   const savePng = useCallback((dataUrl) => saveDataUrl(dataUrl, 'mocha_tag.png'), []);
@@ -363,12 +375,12 @@ export function useTagBuilder(active) {
 
   const api = useMemo(
     () => ({
-      design, selected, selectedId, setSelectedId, toast, stats, busy, historyFlags,
+      design, selected, selectedId, animation, setAnimation, exportAnim, setExportAnim, setSelectedId, toast, stats, busy, historyFlags,
       updateTag, updateGlobal, addTag, duplicateTag, removeTag, moveTag, loadPreset,
       uploadFont, uploadSvg, handleExport, renderImage, checkPrintability, copyShareLink,
       resetView, savePng, undo, redo,
     }),
-    [design, selected, selectedId, toast, stats, busy, historyFlags, updateTag, updateGlobal, addTag,
+    [design, selected, selectedId, animation, setAnimation, exportAnim, toast, stats, busy, historyFlags, updateTag, updateGlobal, addTag,
       duplicateTag, removeTag, moveTag, loadPreset, uploadFont, uploadSvg, handleExport, renderImage,
       checkPrintability, copyShareLink, resetView, savePng, undo, redo]
   );

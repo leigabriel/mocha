@@ -1,3 +1,4 @@
+import { CLIPS, CLIP_IDS } from '../../tagbuilder/animation.js';
 import { BACKGROUNDS, FONTS, MATERIAL_IDS, MATERIAL_LABELS, METAL_IDS, SHAPES, TAG_LIMITS as L } from '../../tagbuilder/constants.js';
 import { FORMAT_INFO } from '../../tagbuilder/exporters.js';
 import { PRESETS } from '../../tagbuilder/presets.js';
@@ -143,9 +144,25 @@ function Hardware({ b }) {
   );
 }
 
+function Motion({ b }) {
+  return (
+    <Section title="07 Animation" hint={b.animation === 'off' ? 'off' : CLIPS[b.animation].label}>
+      <div className="grid grid-cols-2 gap-1" role="group" aria-label="Preview animation">
+        <Seg pressed={b.animation === 'off'} onClick={() => b.setAnimation('off')} className="min-h-[34px] text-[11px] uppercase">Off</Seg>
+        {CLIP_IDS.map((id) => (
+          <Seg key={id} pressed={b.animation === id} onClick={() => b.setAnimation(id)} className="min-h-[34px] text-[11px] uppercase">{CLIPS[id].label}</Seg>
+        ))}
+      </div>
+      <p className="text-soft font-mono text-[11px]">
+        Plays live in the 3D view. Items sway on their chains and never pass through each other. Pick which loop to embed under Download.
+      </p>
+    </Section>
+  );
+}
+
 function Scene({ b }) {
   return (
-    <Section title="07 Backdrop & presets" defaultOpen={false}>
+    <Section title="08 Backdrop & presets" defaultOpen={false}>
       <div className="grid grid-cols-5 gap-1" role="group" aria-label="Backdrop">
         {Object.entries(BACKGROUNDS).map(([id, v]) => (
           <Seg key={id} pressed={b.design.bg === id} onClick={() => b.updateGlobal({ bg: id })} className="min-h-[32px] text-[11px]">{v.label}</Seg>
@@ -170,7 +187,13 @@ function Export({ b }) {
   const { stats } = b;
   const h = stats.health;
   return (
-    <Section title="08 Download" hint={`${stats.triangles.toLocaleString()} tris`}>
+    <Section title="09 Download" hint={`${stats.triangles.toLocaleString()} tris`}>
+      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Animation to embed">
+        {[['none', 'Still'], ...CLIP_IDS.map((id) => [id, CLIPS[id].label]), ['both', 'All clips']].map(([id, label]) => (
+          <Seg key={id} pressed={b.exportAnim === id} onClick={() => b.setExportAnim(id)} className="min-h-[32px] text-[11px] uppercase" title="Animation embedded in GLB, GLTF and the Blender script">{label}</Seg>
+        ))}
+      </div>
+      <p className="text-soft font-mono text-[11px]">Animation is embedded in GLB, GLTF and Blender. Other formats are still models.</p>
       <div className="grid grid-cols-2 gap-1.5">
         {FORMATS.map((f) => (
           <button key={f} type="button" disabled={b.busy} onClick={() => b.handleExport(f)} title={FORMAT_INFO[f].note} className="hud-btn min-h-[40px] text-[11px] font-bold uppercase">
@@ -223,6 +246,7 @@ export default function TagPanel({ b }) {
         <TagList b={b} />
         {b.selected ? <TagSettings b={b} t={b.selected} /> : null}
         <Hardware b={b} />
+        <Motion b={b} />
         <Scene b={b} />
         <Export b={b} />
       </div>

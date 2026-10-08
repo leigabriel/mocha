@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BACKGROUNDS } from './constants.js';
+import { CLIPS, poseAt, poseRest } from './animation.js';
 
 const FOV = 28;
 const HOVER = { color: 0xffffff, intensity: 0.12 };
@@ -75,6 +76,9 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
   let selectedId = null;
   let hoverId = null;
   let userMoved = false;
+  let built = null;
+  let animKind = null;
+  let animStart = 0;
 
   const invalidate = () => {
     dirty = true;
@@ -120,16 +124,22 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     invalidate();
   }
 
-  function setModel(built, { refit = false, view = null } = {}) {
-    if (model) {
-      scene.remove(model);
-      built.previous?.dispose?.();
-    }
-    model = built.group;
-    bounds = built.bounds.clone();
+  function setModel(next, { refit = false, view = null } = {}) {
+    if (model) scene.remove(model);
+    model = next.group;
+    built = next;
+    bounds = next.bounds.clone();
     scene.add(model);
     applyHighlights();
     if (refit || !userMoved) fit(view);
+    invalidate();
+  }
+
+  /** Plays a motion loop live ('swing', 'spin', 'spinswing') or stops it (null). */
+  function setAnimation(kind) {
+    animKind = CLIPS[kind] ? kind : null;
+    animStart = performance.now();
+    if (!animKind && built) poseRest(built);
     invalidate();
   }
 
@@ -217,6 +227,11 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     if (disposed) return;
     rafId = requestAnimationFrame(loop);
     const moved = controls.update();
+    if (animKind && built) {
+      const t = ((performance.now() - animStart) / 1000) % CLIPS[animKind].duration;
+      poseAt(built, animKind, t);
+      dirty = true;
+    }
     if (dirty || moved) {
       dirty = false;
       renderer.render(scene, camera);
@@ -280,6 +295,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     renderer,
     canvas,
     setModel,
+    setAnimation,
     setSelected,
     setBackground,
     fit: (view) => {

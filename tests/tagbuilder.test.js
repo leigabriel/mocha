@@ -4,7 +4,8 @@ import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FONTS } from '../src/tagbuilder/constants.js';
 import { registerFont } from '../src/tagbuilder/fonts.js';
-import { buildKeychain } from '../src/tagbuilder/builder.js';
+import { buildKeychain, pairOverlaps } from '../src/tagbuilder/builder.js';
+import { bakeClip, poseAt, poseRest } from '../src/tagbuilder/animation.js';
 import { decodeTagDesign, defaultDesign, defaultTag, encodeTagDesign, parseTagDesign, sanitizeTagDesign, serializeTagDesign } from '../src/tagbuilder/design.js';
 import { SHAPES } from '../src/tagbuilder/constants.js';
 import { buildOBJ, buildPLY, exportModel, meshHealth, prepareExportRoot } from '../src/tagbuilder/exporters.js';
@@ -130,5 +131,53 @@ describe('exports', () => {
     expect(h.parts).toBeGreaterThan(10);
     expect(h.triangles).toBeGreaterThan(20000);
     kc.dispose();
+  });
+});
+
+describe('animation', () => {
+  it.each(['swing', 'spin', 'spinswing'])('%s loops seamlessly and never overlaps', (kind) => {
+    const kc = buildKeychain(defaultDesign());
+    const clip = bakeClip(kc, kind);
+    expect(clip.duration).toBeGreaterThan(3);
+    const first = clip.tracks.find((t) => t.name === 'Mocha_Swing.quaternion');
+    const times = first.times;
+    expect(times.length).toBe(Math.round(clip.duration * 30) + 1);
+    // last key equals first key up to sign (same rotation)
+    for (const tr of clip.tracks) {
+      const v = tr.values;
+      const n = v.length;
+      const dot = v[0] * v[n - 4] + v[1] * v[n - 3] + v[2] * v[n - 2] + v[3] * v[n - 1];
+      expect(Math.abs(Math.abs(dot) - 1)).toBeLessThan(1e-6);
+    }
+    // sample frames: no two items interpenetrate
+    let worst = 0;
+    for (let k = 0; k < 120; k += 7) {
+      poseAt(kc, kind, (k / 30) % clip.duration);
+      worst = Math.max(worst, pairOverlaps(kc.items, kc.group).reduce((m, h) => Math.max(m, h[2]), 0));
+    }
+    expect(worst).toBeLessThan(0.3);
+    kc.dispose();
+  });
+
+  it('returns to the rest pose', () => {
+    const kc = buildKeychain(defaultDesign());
+    const before = kc.items.map((b) => b.hang.rotation.x);
+    poseAt(kc, 'spinswing', 1.3);
+    poseRest(kc);
+    expect(kc.items.map((b) => b.hang.rotation.x)).toEqual(before);
+    expect(kc.rig.spin.rotation.y).toBe(0);
+    kc.dispose();
+  });
+
+  it('embeds the chosen clips in the GLB', async () => {
+    const { blob } = await exportModel('glb', defaultDesign(), { anim: 'both' });
+    const buf = new Uint8Array(await readBlob(blob));
+    const len = new DataView(buf.buffer).getUint32(12, true);
+    const json = JSON.parse(new TextDecoder().decode(buf.slice(20, 20 + len)));
+    expect(json.animations.map((a) => a.name).sort()).toEqual(['Mocha_Spin_360', 'Mocha_Spin_Swing', 'Mocha_Swing']);
+    const still = await exportModel('glb', defaultDesign(), { anim: 'none' });
+    const b2 = new Uint8Array(await readBlob(still.blob));
+    const l2 = new DataView(b2.buffer).getUint32(12, true);
+    expect(JSON.parse(new TextDecoder().decode(b2.slice(20, 20 + l2))).animations).toBeUndefined();
   });
 });
