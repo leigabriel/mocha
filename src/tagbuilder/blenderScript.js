@@ -48,6 +48,13 @@ with open(glb_path, "wb") as f:
     f.write(base64.b64decode("".join(GLB_BASE64.split())))
 bpy.ops.import_scene.gltf(filepath=glb_path)
 
+# ---- animation: the GLB may carry loops; match the timeline to the longest one
+scene = bpy.context.scene
+scene.render.fps = 30
+if bpy.data.actions:
+    scene.frame_start = 1
+    scene.frame_end = max(int(round(a.frame_range[1])) for a in bpy.data.actions)
+
 # ---- world: vertical gradient like the preview backdrop
 def hex_to_rgba(h):
     h = h.lstrip("#")

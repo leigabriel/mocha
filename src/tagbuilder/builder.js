@@ -398,13 +398,38 @@ export function buildKeychain(design) {
     }
     hang.add(local);
     ringGroup.add(hang);
-    bodies.push({ hang, boxes: box, kind: item.kind, id: item.tag?.id });
+    bodies.push({
+      hang,
+      boxes: box,
+      kind: item.kind,
+      id: item.tag?.id,
+      twist: item.kind === 'tag' ? parts.get(item.tag.id).group : null,
+      restTwist: item.kind === 'tag' ? parts.get(item.tag.id).group.rotation.y : 0,
+    });
   });
 
   solveHang(bodies, root, ringGroup);
+  bodies.forEach((b) => (b.restPitch = b.hang.rotation.x));
 
   root.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(root);
+
+  // Motion rig: Swing (tilts about the top of the keychain) > Spin (turns about the
+  // vertical axis) > Content. All identity at rest, so the model looks the same.
+  const pivot = new THREE.Vector3(0, bounds.max.y, 0);
+  const swing = new THREE.Group();
+  swing.name = 'Mocha_Swing';
+  swing.position.copy(pivot);
+  const spin = new THREE.Group();
+  spin.name = 'Mocha_Spin';
+  const content = new THREE.Group();
+  content.name = 'Mocha_Content';
+  content.position.copy(pivot).negate();
+  [...root.children].forEach((c) => content.add(c));
+  spin.add(content);
+  swing.add(spin);
+  root.add(swing);
+  root.updateMatrixWorld(true);
   const report = { overlap: maxOverlap(bodies, root), parts: parts.size };
 
   function dispose() {
@@ -413,7 +438,7 @@ export function buildKeychain(design) {
     });
     owned.forEach((m) => m.dispose());
   }
-  return { group: root, parts, bounds, report, dispose, items: bodies };
+  return { group: root, parts, bounds, report, dispose, items: bodies, rig: { swing, spin } };
 }
 
 // --------------------------------------------------------------- hang solver
@@ -473,9 +498,10 @@ function maxOverlap(bodies, root) {
 
 const _axis = new THREE.Vector3(1, 0, 0);
 const _pivot = new THREE.Vector3();
+const _q = new THREE.Quaternion();
 const _r = new THREE.Vector3();
 const _d = new THREE.Vector3();
-const MAX_PITCH = 52 * DEG;
+export const MAX_PITCH = 52 * DEG;
 
 /**
  * Items on one ring would overlap, so the chains swing apart. Starts from a small fan
@@ -494,9 +520,10 @@ function solveHang(bodies, root, ringGroup) {
   }
 }
 
-function relax(bodies, root) {
+export function relax(bodies, root) {
   for (let iter = 0; iter < 200; iter++) {
     root.updateMatrixWorld(true);
+    _axis.set(1, 0, 0).applyQuaternion(bodies[0].hang.parent.getWorldQuaternion(_q)).normalize();
     let touched = false;
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < bodies.length; j++) {
