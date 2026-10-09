@@ -255,7 +255,7 @@ function ringFrame(design, ctx) {
  * Elements alternate between planes normal to u (local x) and v (local z). Returns the
  * group and the position where the tag/key hangs.
  */
-function buildChain(links, anchor, ctx) {
+export function buildChain(links, anchor, ctx) {
   const g = new THREE.Group();
   g.name = 'Chain';
   const { Rt, wire: wj } = JUMP_RING;
@@ -509,7 +509,7 @@ export const MAX_PITCH = 52 * DEG;
  * overlapping pair away from each other about that wire until nothing intersects. A
  * contact moves a body by rotating its chain, exactly like the charm solver. Deterministic.
  */
-function solveHang(bodies, root, ringGroup) {
+export function solveHang(bodies, root, ringGroup) {
   const centre = (bodies.length - 1) / 2;
   ringGroup.updateMatrixWorld(true);
   _axis.set(1, 0, 0).applyQuaternion(ringGroup.getWorldQuaternion(new THREE.Quaternion())).normalize();

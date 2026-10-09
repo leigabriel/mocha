@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BACKGROUNDS } from './constants.js';
-import { CLIPS, poseAt, poseRest } from './animation.js';
+import * as tagAnimator from './animation.js';
 
 const FOV = 28;
 const HOVER = { color: 0xffffff, intensity: 0.12 };
 const SELECT = { color: 0x3b6bff, intensity: 0.22 };
 
 /** Soft-box studio used for reflections: a dim dome with three bright rectangles. */
-function buildStudioEnvironment() {
+function buildStudioEnvironment(kind = 'tag') {
   const scene = new THREE.Scene();
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(10, 32, 16),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6f7b8e), side: THREE.BackSide })
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(kind === 'showcase' ? 0x0c0e12 : 0x6f7b8e), side: THREE.BackSide })
   );
   scene.add(dome);
   const box = (w, h, intensity, pos, tint = 0xffffff) => {
@@ -22,6 +22,24 @@ function buildStudioEnvironment() {
     m.lookAt(0, 0, 0);
     scene.add(m);
   };
+  if (kind === 'showcase') {
+    // dark room, a few very bright strips: glass and chrome get crisp streaks and deep reflections
+    box(2.2, 16, 22, [-8.5, 0, 5]); // left strip
+    box(1.8, 16, 18, [8.5, 2, 5], 0xdcebff); // right strip
+    box(16, 3, 18, [0, 8.5, 6]); // top box
+    box(11, 1.6, 14, [0, -7.5, 6], 0xfff1de); // low warm strip
+    box(3, 12, 14, [-2, 3, -9], 0xffffff); // rim from behind
+    return scene;
+  }
+  if (kind === 'pack') {
+    // long strip lights, so a glossy bag shows bright streaks along its creases and edges
+    box(12, 3.2, 8, [0, 8, 7]); // overhead softbox in front
+    box(1.8, 12, 9, [-8.5, 0, 6], 0xdfeaff); // left strip
+    box(1.4, 12, 8, [8.5, 1, 6], 0xcfe4ff); // right strip
+    box(9, 1.2, 7, [-3, -4.5, 8], 0xfff1de); // low strip
+    box(8, 2, 5, [0, 7, -5]); // rim
+    return scene;
+  }
   box(6, 4, 9, [4, 6, 5]); // key
   box(3, 7, 5, [-7, 2, 2], 0xdfe9ff); // fill strip
   box(8, 2, 6, [0, 7, -5]); // top / rim
@@ -33,11 +51,16 @@ function buildStudioEnvironment() {
  * Orbit viewer for the Tag Builder. Render-on-demand; the model is swapped with
  * `setModel`. Picking and hover report the tag id found under the pointer.
  */
-export function createTagStage(container, { onPick = () => {}, onHover = () => {} } = {}) {
+export function createTagStage(
+  container,
+  { onPick = () => {}, onHover = () => {}, onDrag = null, environment = 'tag', animator = tagAnimator, defaultView = [-0.7, 0.1, 0.7], backgrounds = BACKGROUNDS, toneMapping = THREE.ACESFilmicToneMapping, sceneBackground = false } = {}
+) {
+  const { CLIPS, poseAt, poseRest } = animator;
+  const resolveBg = (v) => (v && typeof v === 'object' ? v : backgrounds[v] ?? Object.values(backgrounds)[0]);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 4000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = toneMapping;
   renderer.toneMappingExposure = 1.05;
   if ('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale = 1;
   const canvas = renderer.domElement;
@@ -48,7 +71,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
   container.replaceChildren(canvas);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = buildStudioEnvironment();
+  const envScene = buildStudioEnvironment(environment);
   const envTarget = pmrem.fromScene(envScene, 0.02);
   scene.environment = envTarget.texture;
   scene.environmentIntensity = 1;
@@ -93,7 +116,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     const dir = view
       ? new THREE.Vector3(...view).normalize()
       : camera.position.clone().sub(controls.target).normalize();
-    if (!Number.isFinite(dir.x) || dir.lengthSq() === 0) dir.set(-0.7, 0.1, 0.7).normalize();
+    if (!Number.isFinite(dir.x) || dir.lengthSq() === 0) dir.set(...defaultView).normalize();
     controls.target.copy(center);
     camera.position.copy(center).addScaledVector(dir, dist);
     camera.near = Math.max(0.5, dist / 80);
@@ -108,17 +131,18 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
   function applyHighlights() {
     if (!model) return;
     model.traverse((o) => {
-      if (!o.isMesh || !o.material || o.material.userData.shared) return;
+      if (!o.isMesh || !o.material) return;
       const id = o.userData.tagId;
       const state = id && id === selectedId ? SELECT : id && id === hoverId ? HOVER : null;
-      const m = o.material;
-      if (!m.emissive) return;
-      if (state) {
-        m.emissive.setHex(state.color);
-        m.emissiveIntensity = state.intensity;
-      } else {
-        m.emissive.setHex(0x000000);
-        m.emissiveIntensity = 1;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.userData.shared || !m.emissive) continue;
+        if (state) {
+          m.emissive.setHex(state.color);
+          m.emissiveIntensity = state.intensity;
+        } else {
+          m.emissive.setHex(0x000000);
+          m.emissiveIntensity = 1;
+        }
       }
     });
     invalidate();
@@ -148,13 +172,41 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     applyHighlights();
   }
 
+  let bgTexture = null;
+  function gradientTexture(bg) {
+    const c = document.createElement('canvas');
+    c.width = 2;
+    c.height = 256;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, bg.top);
+    grad.addColorStop(1, bg.bottom);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 2, 256);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
   function setBackground(id) {
-    const bg = BACKGROUNDS[id] ?? BACKGROUNDS.studio;
-    if (bg.top) {
+    const bg = resolveBg(id);
+    bgTexture?.dispose();
+    bgTexture = null;
+    // With a transparent canvas, three renders glass (transmission) over a white haze. A real
+    // scene background gives it the true backdrop to refract.
+    if (sceneBackground && bg.top && bg.top === bg.bottom) {
+      scene.background = new THREE.Color(bg.top);
+      container.style.background = bg.top;
+    } else if (sceneBackground && bg.top) {
+      bgTexture = gradientTexture(bg);
+      scene.background = bgTexture;
+      container.style.background = bg.top;
+    } else if (bg.top) {
+      scene.background = null;
       container.style.background = `linear-gradient(180deg, ${bg.top}, ${bg.bottom})`;
     } else {
-      container.style.background =
-        'repeating-conic-gradient(#d9dbe0 0% 25%, #eceef2 0% 50%) 50% / 24px 24px';
+      scene.background = null;
+      container.style.background = 'repeating-conic-gradient(#d9dbe0 0% 25%, #eceef2 0% 50%) 50% / 24px 24px';
     }
     invalidate();
   }
@@ -173,16 +225,52 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
   }
 
   let down = null;
+  let drag = null;
+  const dragPlane = new THREE.Plane();
+  const dragHit = new THREE.Vector3();
+  const nWorld = new THREE.Vector3();
+  const rayAt = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+  };
+  // capture phase: when a draggable item is hit we disable the orbit controls before they see the event
   const onDown = (e) => {
     down = { x: e.clientX, y: e.clientY };
+    if (!onDrag || !model || animKind || e.button !== 0) return;
+    rayAt(e);
+    const hit = ray.intersectObject(model, true).find((h) => h.object.userData.tagId);
+    if (!hit || hit.object.userData.tagId === 'card') return;
+    nWorld.set(0, 0, 1).transformDirection(model.matrixWorld);
+    dragPlane.setFromNormalAndCoplanarPoint(nWorld, hit.point);
+    drag = { id: hit.object.userData.tagId, last: model.worldToLocal(hit.point.clone()), moved: false };
+    controls.enabled = false;
+    canvas.setPointerCapture?.(e.pointerId);
   };
   const onUp = (e) => {
+    const wasDrag = drag?.moved;
+    if (drag) {
+      drag = null;
+      controls.enabled = true;
+    }
     if (!down) return;
     const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
     down = null;
-    if (moved < 5) onPick(pickAt(e));
+    if (moved < 5 && !wasDrag) onPick(pickAt(e));
   };
   const onMove = (e) => {
+    if (drag) {
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 3 && !drag.moved) return;
+      rayAt(e);
+      if (!ray.ray.intersectPlane(dragPlane, dragHit)) return;
+      const local = model.worldToLocal(dragHit.clone());
+      if (!drag.moved) onPick(drag.id);
+      drag.moved = true;
+      onDrag(drag.id, local.x - drag.last.x, local.y - drag.last.y);
+      drag.last = local;
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
     if (down) return;
     const id = pickAt(e);
     canvas.style.cursor = id ? 'pointer' : 'grab';
@@ -199,7 +287,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
       onHover(null);
     }
   };
-  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointerdown', onDown, true);
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerleave', onLeave);
@@ -244,7 +332,7 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
    * the long side). With a background, the backdrop gradient is painted behind it.
    * Returns a PNG blob.
    */
-  async function snapshot({ scale = 3, transparent = false, bgId = 'studio' } = {}) {
+  async function snapshot({ scale = 3, transparent = false, bgId = 'studio', format = 'png', quality = 0.92 } = {}) {
     const size = renderer.getSize(new THREE.Vector2());
     const prevRatio = renderer.getPixelRatio();
     const factor = Math.min(scale, 4096 / Math.max(size.x, size.y));
@@ -252,46 +340,66 @@ export function createTagStage(container, { onPick = () => {}, onHover = () => {
     const h = Math.round(size.y * factor);
     renderer.setPixelRatio(1);
     renderer.setSize(w, h, false);
+    const keepBg = scene.background;
+    if (transparent && format !== 'jpeg') scene.background = null;
     renderer.render(scene, camera);
+    scene.background = keepBg;
 
     const out = document.createElement('canvas');
     out.width = w;
     out.height = h;
     const ctx = out.getContext('2d');
-    const bg = BACKGROUNDS[bgId] ?? BACKGROUNDS.studio;
-    if (!transparent && bg.top) {
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, bg.top);
-      grad.addColorStop(1, bg.bottom);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
+    const jpeg = format === 'jpeg';
+    const bg = resolveBg(bgId);
+    if (jpeg || (!transparent && bg.top)) {
+      if (!bg.top) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, bg.top);
+        grad.addColorStop(1, bg.bottom);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      }
     }
     ctx.drawImage(canvas, 0, 0, w, h);
 
     renderer.setPixelRatio(prevRatio);
     renderer.setSize(size.x, size.y, false);
     invalidate();
-    return new Promise((resolve, reject) => out.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG failed'))), 'image/png'));
+    return new Promise((resolve, reject) =>
+      out.toBlob((b) => (b ? resolve(b) : reject(new Error('Image export failed'))), jpeg ? 'image/jpeg' : 'image/png', quality)
+    );
   }
 
   function dispose() {
     disposed = true;
     cancelAnimationFrame(rafId);
     resizeObserver.disconnect();
-    canvas.removeEventListener('pointerdown', onDown);
+    canvas.removeEventListener('pointerdown', onDown, true);
     canvas.removeEventListener('pointerup', onUp);
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerleave', onLeave);
     controls.dispose();
     envTarget.dispose();
+    bgTexture?.dispose();
     renderer.dispose();
     renderer.forceContextLoss();
     if (canvas.parentNode === container) container.removeChild(canvas);
   }
 
+  /** Lighting preset: environment strength and key light strength. */
+  function setLighting({ env = 1, key: keyStrength = 0.9 } = {}) {
+    scene.environmentIntensity = env;
+    key.intensity = keyStrength;
+    invalidate();
+  }
+
   return {
     scene,
     camera,
+    setLighting,
     renderer,
     canvas,
     setModel,
