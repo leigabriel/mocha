@@ -34,7 +34,7 @@ function addStudioRig(root, bounds, lighting) {
   mk('Mocha_RimLight', 0xffffff, 2 * (k.key / 0.9), [0, 200, -260]);
   const size = bounds.getSize(new THREE.Vector3());
   const centre = bounds.getCenter(new THREE.Vector3());
-  const cam = new THREE.PerspectiveCamera(28, size.x / size.y, 1, 6000);
+  const cam = new THREE.PerspectiveCamera(28, size.x / size.y, 0.01, 20);
   const dist = (Math.max(size.y / 2, size.x / 2 / Math.max(0.5, size.x / size.y)) / Math.tan((14 * Math.PI) / 180)) * 1.2 + size.z;
   cam.name = 'Mocha_Camera';
   cam.position.set(centre.x + dist * 0.12, centre.y + dist * 0.06, centre.z + dist);
