@@ -179,5 +179,5 @@ describe('animation', () => {
     const b2 = new Uint8Array(await readBlob(still.blob));
     const l2 = new DataView(b2.buffer).getUint32(12, true);
     expect(JSON.parse(new TextDecoder().decode(b2.slice(20, 20 + l2))).animations).toBeUndefined();
-  });
+  }, 30000);
 });

@@ -79,3 +79,10 @@ Notes: the 3D model is thin paper geometry with the printed pictures as textures
 - Higher-resolution stamp and card textures with paper grain and a paper normal map; contact shadows under each stamp; denser, slightly tilted layout; drag a stamp to move it.
 - New controls: plastic shine, plastic wrinkles, lighting preset (studio / soft / dramatic).
 - glTF is the recommended 3D export: it embeds pictures, key/fill/rim lights, a camera and the spin loop. GLB carries the same data but some viewers ignore lights; neither can embed an environment map.
+
+## Keychain Set tab
+- New fourth tab: a glass or chrome loop clasp (or carabiner / ring only), a split ring and up to 6 customisable charms fanned on jump rings and optional chain links, modelled on a glass-and-chrome product-shot reference.
+- Charm styles: motel tag, bar, ribbed bar, triangle, silhouette (cat, heart, star, bolt, cloud or an uploaded SVG) and disc. Per charm: size, thickness, material (tinted glass, frosted, glossy, matte, soft touch, chrome), colour, title / small line / number, font, raised or printed text, text direction, ribs, ruler marking, chain links, turn.
+- Generate button makes a random set; Reference restores the default.
+- Exports: PNG / JPG, GLTF (recommended) and GLB with lights, camera and the spin / swing loops, and a self-contained Blender script (draft / high / ultra) that swaps materials for Cycles glass, chrome, soft touch and frosted nodes, adds strip-light softboxes, a depth-of-field camera and a denoised render. It was run in Blender (bpy 5) to check it renders. Usage: `blender -b -P file.py -- out.png [--anim] [--samples N] [--res WxH] [--save set.blend]`.
+- Limits: a real .blend file cannot be written in the browser, so the script builds it; transmission materials in the live preview are an approximation of the Cycles render.

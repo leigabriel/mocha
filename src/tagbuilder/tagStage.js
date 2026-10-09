@@ -12,7 +12,7 @@ function buildStudioEnvironment(kind = 'tag') {
   const scene = new THREE.Scene();
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(10, 32, 16),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(0x6f7b8e), side: THREE.BackSide })
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(kind === 'showcase' ? 0x0c0e12 : 0x6f7b8e), side: THREE.BackSide })
   );
   scene.add(dome);
   const box = (w, h, intensity, pos, tint = 0xffffff) => {
@@ -22,6 +22,15 @@ function buildStudioEnvironment(kind = 'tag') {
     m.lookAt(0, 0, 0);
     scene.add(m);
   };
+  if (kind === 'showcase') {
+    // dark room, a few very bright strips: glass and chrome get crisp streaks and deep reflections
+    box(2.2, 16, 22, [-8.5, 0, 5]); // left strip
+    box(1.8, 16, 18, [8.5, 2, 5], 0xdcebff); // right strip
+    box(16, 3, 18, [0, 8.5, 6]); // top box
+    box(11, 1.6, 14, [0, -7.5, 6], 0xfff1de); // low warm strip
+    box(3, 12, 14, [-2, 3, -9], 0xffffff); // rim from behind
+    return scene;
+  }
   if (kind === 'pack') {
     // long strip lights, so a glossy bag shows bright streaks along its creases and edges
     box(12, 3.2, 8, [0, 8, 7]); // overhead softbox in front
@@ -185,7 +194,10 @@ export function createTagStage(
     bgTexture = null;
     // With a transparent canvas, three renders glass (transmission) over a white haze. A real
     // scene background gives it the true backdrop to refract.
-    if (sceneBackground && bg.top) {
+    if (sceneBackground && bg.top && bg.top === bg.bottom) {
+      scene.background = new THREE.Color(bg.top);
+      container.style.background = bg.top;
+    } else if (sceneBackground && bg.top) {
       bgTexture = gradientTexture(bg);
       scene.background = bgTexture;
       container.style.background = bg.top;

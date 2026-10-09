@@ -4,6 +4,7 @@ import LeftPanel from './components/LeftPanel.jsx';
 import Viewport from './components/Viewport.jsx';
 import TagBuilder from './components/tagbuilder/TagBuilder.jsx';
 import StampPack from './components/stamppack/StampPack.jsx';
+import KeySet from './components/keyset/KeySet.jsx';
 import { Seg } from './components/panel/ui.jsx';
 import { useKeychainStudio } from './hooks/useKeychainStudio.js';
 
@@ -11,6 +12,7 @@ const MODES = [
   { id: 'emoji', label: 'Emoji Charms' },
   { id: 'tag', label: 'Tag Builder' },
   { id: 'stamp', label: 'Stamp Pack' },
+  { id: 'set', label: 'Keychain Set' },
 ];
 
 const initialMode = () => (typeof window !== 'undefined' && window.location.hash.startsWith('#t=') ? 'tag' : 'emoji');
@@ -39,7 +41,7 @@ export default function App() {
         ))}
       </nav>
       <div className="min-h-0 flex-1">
-        {mode === 'emoji' ? <EmojiStudio /> : mode === 'tag' ? <TagBuilder active /> : <StampPack active />}
+        {mode === 'emoji' ? <EmojiStudio /> : mode === 'tag' ? <TagBuilder active /> : mode === 'stamp' ? <StampPack active /> : <KeySet active />}
       </div>
     </div>
   );
