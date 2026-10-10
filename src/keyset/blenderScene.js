@@ -23,9 +23,9 @@ export const BLENDER_QUALITY = {
  * turntable. Run it in Blender's Scripting tab, or headless:
  *   blender -b -P mocha_key_set.py -- render.png [--anim] [--samples 256] [--res 1620x2025] [--save set.blend]
  */
-export function blenderScene(design, glbArrayBuffer, bounds, { quality = 'high' } = {}) {
+export function blenderScene(design, glbArrayBuffer, bounds, { quality = 'high', backdropHex = null, keepRig = false, title = 'Mocha Keychain Set' } = {}) {
   const q = BLENDER_QUALITY[quality] ?? BLENDER_QUALITY.high;
-  const bg = BACKDROPS[design.backdrop] ?? BACKDROPS.black;
+  const bg = backdropHex ? { top: backdropHex } : BACKDROPS[design.backdrop] ?? BACKDROPS.black;
   const mm = (v) => (v / 1000).toFixed(5);
   const cx = mm((bounds.min.x + bounds.max.x) / 2);
   const cy = mm((bounds.min.y + bounds.max.y) / 2);
@@ -36,7 +36,7 @@ export function blenderScene(design, glbArrayBuffer, bounds, { quality = 'high' 
   const bgHex = bg.top ?? '#000000';
   const transparent = bg.top === null;
 
-  return `# Mocha Keychain Set: Blender scene (Cycles, studio product shot)
+  return `# ${title}: Blender scene (Cycles, studio product shot)
 # Generated file. Run in Blender (Scripting tab > Run Script) or headless:
 #   blender -b -P this_file.py -- render.png [--anim] [--samples 256] [--res 1620x2025] [--save set.blend]
 # Tweak the QUALITY block below to trade speed for noise.
@@ -90,10 +90,26 @@ with open(glb_path, "wb") as f:
     f.write(base64.b64decode("".join(GLB_BASE64.split())))
 bpy.ops.import_scene.gltf(filepath=glb_path)
 
-# the exporter adds a camera and lights for glTF viewers; this script builds its own rig
-for obj in list(bpy.data.objects):
-    if obj.type in {"CAMERA", "LIGHT"}:
-        bpy.data.objects.remove(obj, do_unlink=True)
+KEEP_RIG = ${keepRig ? 'True' : 'False'}   # keep the scene's own lights and camera when the file has them
+# the exporter adds a camera and lights for glTF viewers; unless KEEP_RIG, this script builds its own rig
+had_light = any(o.type == "LIGHT" for o in bpy.data.objects)
+had_camera = any(o.type == "CAMERA" for o in bpy.data.objects)
+if not KEEP_RIG:
+    for obj in list(bpy.data.objects):
+        if obj.type in {"CAMERA", "LIGHT"}:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    had_light = had_camera = False
+else:
+    # glTF stores photometric units (candela / lux); Blender's importer divides them down to a few
+    # watts, which renders almost black. Scale back up to a usual Cycles strength.
+    for obj in bpy.data.objects:
+        if obj.type != "LIGHT":
+            continue
+        if obj.data.type == "SUN":
+            obj.data.energy *= 683.0 * 0.9
+        else:
+            obj.data.energy *= 683.0 / (4.0 * math.pi) * 4.5
+        obj.data.use_shadow = True
 
 scene.render.fps = 30
 if bpy.data.actions:
@@ -115,7 +131,7 @@ def set_input(node, names, value):
             node.inputs[name].default_value = value
             return
 
-def make_material(mat, role, hexv):
+def make_material(mat, role, hexv, rough=None):
     mat.use_nodes = True
     nt = mat.node_tree
     nt.nodes.clear()
@@ -137,6 +153,10 @@ def make_material(mat, role, hexv):
     elif role == "chrome" or role == "metal":
         set_input(bsdf, ["Metallic"], 1.0)
         set_input(bsdf, ["Roughness"], METAL_ROUGHNESS.get(hexv.lstrip("#"), 0.06) if role == "metal" else 0.05)
+    elif role == "emissive":
+        set_input(bsdf, ["Roughness"], 0.4)
+        set_input(bsdf, ["Emission Color", "Emission"], base)
+        set_input(bsdf, ["Emission Strength"], 3.0)
     elif role == "soft":
         set_input(bsdf, ["Roughness"], 0.7)
         set_input(bsdf, ["Sheen Weight", "Sheen"], 0.6)
@@ -153,7 +173,12 @@ def make_material(mat, role, hexv):
 for mat in bpy.data.materials:
     parts = mat.name.split("_")
     if len(parts) >= 3 and parts[0] == "KS":
-        make_material(mat, parts[1], "#" + parts[2][:6])
+        r = int(parts[3]) / 100.0 if len(parts) > 3 and parts[3].isdigit() else None
+        make_material(mat, parts[1], "#" + parts[2][:6], r)
+        if r is not None:
+            for node in mat.node_tree.nodes:
+                if node.type == "BSDF_PRINCIPLED" and parts[1] in ("gloss", "matte", "soft", "frost", "metal"):
+                    set_input(node, ["Roughness"], r)
 
 # every mesh gets smooth shading (the glTF import already carries the normals)
 for obj in bpy.data.objects:
@@ -201,24 +226,28 @@ def softbox(name, offset, size_xy, energy, color=(1.0, 1.0, 1.0)):
 
 # long strip lights make the glass and chrome show clean streak highlights
 E = (size / 0.2) ** 2   # light energy scales with the square of the scene size
-softbox("Strip_L", (-size * 1.15, -size * 0.9, size * 0.1), (size * 0.10, size * 1.5), 3.4 * E, (0.86, 0.92, 1.0))
-softbox("Strip_R", (size * 1.15, -size * 0.8, size * 0.2), (size * 0.09, size * 1.4), 2.8 * E, (0.8, 0.9, 1.0))
-softbox("Top", (0, -size * 0.7, size * 1.4), (size * 1.2, size * 0.5), 2 * E)
-softbox("Rim", (size * 0.2, size * 1.1, size * 0.6), (size * 1.0, size * 0.5), 3.4 * E)
-softbox("Floor_Bounce", (0, -size * 1.2, -size * 0.9), (size * 1.3, size * 0.4), 0.7 * E, (1.0, 0.94, 0.86))
+if not had_light:
+    softbox("Strip_L", (-size * 1.15, -size * 0.9, size * 0.1), (size * 0.10, size * 1.5), 3.4 * E, (0.86, 0.92, 1.0))
+    softbox("Strip_R", (size * 1.15, -size * 0.8, size * 0.2), (size * 0.09, size * 1.4), 2.8 * E, (0.8, 0.9, 1.0))
+    softbox("Top", (0, -size * 0.7, size * 1.4), (size * 1.2, size * 0.5), 2 * E)
+    softbox("Rim", (size * 0.2, size * 1.1, size * 0.6), (size * 1.0, size * 0.5), 3.4 * E)
+    softbox("Floor_Bounce", (0, -size * 1.2, -size * 0.9), (size * 1.3, size * 0.4), 0.7 * E, (1.0, 0.94, 0.86))
 
 # ------------------------------------------------------------------ camera
-cam_data = bpy.data.cameras.new("Camera")
-cam_data.lens = 85
-cam_data.dof.use_dof = True
-cam_data.dof.aperture_fstop = 9.0
-cam = bpy.data.objects.new("Camera", cam_data)
-scene.collection.objects.link(cam)
-scene.camera = cam
-dist = size * 1.18 * cam_data.lens / cam_data.sensor_width
-cam.location = center + Vector((dist * 0.1, -dist, dist * 0.05))
-cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
-cam_data.dof.focus_distance = (center - cam.location).length
+if had_camera:
+    scene.camera = next(o for o in bpy.data.objects if o.type == "CAMERA")
+else:
+    cam_data = bpy.data.cameras.new("Camera")
+    cam_data.lens = 85
+    cam_data.dof.use_dof = True
+    cam_data.dof.aperture_fstop = 9.0
+    cam = bpy.data.objects.new("Camera", cam_data)
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    dist = size * 1.18 * cam_data.lens / cam_data.sensor_width
+    cam.location = center + Vector((dist * 0.1, -dist, dist * 0.05))
+    cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
+    cam_data.dof.focus_distance = (center - cam.location).length
 
 # ------------------------------------------------------------------ render
 scene.render.engine = "CYCLES"

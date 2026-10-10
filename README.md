@@ -83,3 +83,7 @@ npm run build    # production build
 ```
 
 Scene code lives in `src/three/`: `physics.js` (fixed-step pendulum), `pose.js` (shared pose maths used by the viewport and exporters), `studio.js` (renderer, camera, lighting), `interaction.js` (pointer handling), `exporters.js` (loaded on demand).
+
+## 3D Studio
+
+Open the **3D Studio** button (or `#/studio`) for a Blender-style editor: shapes, lights, cameras, materials, keyframe animation, and export to GLB, glTF, OBJ, STL, PNG/JPG, project JSON or a Blender (Cycles) script. See `docs/V_TEST_CHANGES.md`.
