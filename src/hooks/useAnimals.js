@@ -72,6 +72,7 @@ export function useAnimals() {
       return undefined;
     }
     stageRef.current = stage;
+    if (import.meta.env.DEV) window.__animalStage = stage;
     const readyTimer = setTimeout(() => setReady(true), 0);
     return () => {
       clearTimeout(readyTimer);

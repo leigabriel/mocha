@@ -99,3 +99,13 @@ A full-page, Blender-style 3D editor, opened from the "3D Studio" button in the 
 - Autosaves to the browser (`mocha.studio.v1`).
 - Not yet: vertex/face edit mode, boolean cuts. The preview is three.js, so the Blender render looks different (lights are rescaled on import).
 - Code: `src/studio/*`, `src/hooks/useStudio.js`, `src/components/studio/*`, tests in `tests/studio.test.js`.
+
+## Animals tab (v-test)
+
+New **Animals** tab: ten procedurally modelled, rigged animals (deer, parrot, dove, eagle, tiger, ostrich, cat, dog, monkey, horse).
+
+- Anatomy-driven lofted, skinned bodies (one shared skeleton per animal), fur/skin/keratin/feather PBR textures generated on canvas (colour, normal, roughness), eyes with iris/lids, hooves, claws, beaks, antlers, whiskers, layered feathers for birds.
+- Baked 30 fps looping clips: idle, walk, run, eat, sleep, and fly (parrot, dove, eagle). The same clips drive the live preview and the GLB/glTF export.
+- Export: GLB / glTF with skins, textures and all clips (about 5-9 MB per animal).
+- Species notes come from `src/animals/descriptions/*.md`.
+- Caveats: procedural geometry, not hand-sculpted; no subsurface scattering in the web preview; fur is texture/normal-map based.

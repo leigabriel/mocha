@@ -205,6 +205,8 @@ export function createAnimalStage(container, { onTime = () => {} } = {}) {
 
   return {
     setRig,
+    camera,
+    controls,
     play,
     seek,
     frame,

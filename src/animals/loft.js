@@ -28,9 +28,9 @@ export function curve(knots) {
 /**
  * Lofts an elliptical cross-section along a path (array of Vector3, already in final space).
  * rx(t) is the sideways radius, ry(t) the radius along the `up` direction, t in 0..1 along the path.
- * Ends are rounded off so no caps are needed. UV: u around the section, v along the path (metres * vScale).
+ * Ends are rounded off so no caps are needed. UV: u around the section, v along the path mapped into vRange (0..1 texture rows).
  */
-export function loft(path, { rx, ry, segs = 20, rings = 40, up = [0, 1, 0], round = [0.08, 0.08], vScale = 1, offset = null, twist = null } = {}) {
+export function loft(path, { rx, ry, segs = 20, rings = 40, up = [0, 1, 0], round = [0.08, 0.08], vRange = [0, 1], offset = null, twist = null } = {}) {
   const curveP = new THREE.CatmullRomCurve3(path, false, 'centripetal');
   const len = curveP.getLength();
   const pts = [];
@@ -82,7 +82,7 @@ export function loft(path, { rx, ry, segs = 20, rings = 40, up = [0, 1, 0], roun
       const s = Math.sin(a);
       // `o` shifts the section along N (e.g. belly hang)
       positions.push(pts[i].x + b.x * ax * c + n.x * (ay * s + o), pts[i].y + b.y * ax * c + n.y * (ay * s + o), pts[i].z + b.z * ax * c + n.z * (ay * s + o));
-      uvs.push(j / segs, t * len * vScale);
+      uvs.push(j / segs, vRange[0] + t * (vRange[1] - vRange[0]));
     }
   }
   const row = segs + 1;
@@ -90,7 +90,7 @@ export function loft(path, { rx, ry, segs = 20, rings = 40, up = [0, 1, 0], roun
     for (let j = 0; j < segs; j++) {
       const a = i * row + j;
       const b = a + row;
-      index.push(a, a + 1, b, a + 1, b + 1, b);
+      index.push(a, b, a + 1, a + 1, b, b + 1);
     }
   }
   const g = new THREE.BufferGeometry();
@@ -111,6 +111,8 @@ export function loft(path, { rx, ry, segs = 20, rings = 40, up = [0, 1, 0], roun
     n.setXYZ(b, x / l, y / l, z / l);
   }
   g.userData.length = len;
+  g.userData.rings = rings;
+  g.userData.segs = segs;
   return g;
 }
 
