@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import Toast from './components/Toast.jsx';
 import LeftPanel from './components/LeftPanel.jsx';
 import Viewport from './components/Viewport.jsx';
 import TagBuilder from './components/tagbuilder/TagBuilder.jsx';
 import StampPack from './components/stamppack/StampPack.jsx';
 import KeySet from './components/keyset/KeySet.jsx';
+import Icon from './components/studio/icons.jsx';
 import { Seg } from './components/panel/ui.jsx';
 import { useKeychainStudio } from './hooks/useKeychainStudio.js';
 
@@ -14,6 +15,9 @@ const MODES = [
   { id: 'stamp', label: 'Stamp Pack' },
   { id: 'set', label: 'Keychain Set' },
 ];
+
+const StudioApp = lazy(() => import('./components/studio/StudioApp.jsx'));
+const inStudio = () => typeof window !== 'undefined' && window.location.hash.startsWith('#/studio');
 
 const initialMode = () => (typeof window !== 'undefined' && window.location.hash.startsWith('#t=') ? 'tag' : 'emoji');
 
@@ -30,6 +34,27 @@ function EmojiStudio() {
 
 export default function App() {
   const [mode, setMode] = useState(initialMode);
+  const [studio, setStudio] = useState(inStudio);
+
+  useEffect(() => {
+    const onHash = () => setStudio(inStudio());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const exitStudio = () => {
+    if (window.history.length > 1 && inStudio()) window.history.back();
+    else window.location.hash = '';
+    setStudio(false);
+  };
+
+  if (studio) {
+    return (
+      <Suspense fallback={<div className="grid h-dvh w-screen place-items-center bg-[#1d1d1d] text-sm text-white/70">Loading 3D Studio…</div>}>
+        <StudioApp onExit={exitStudio} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden bg-brand">
@@ -39,6 +64,9 @@ export default function App() {
             {m.label}
           </Seg>
         ))}
+        <a href="#/studio" className="ml-auto inline-flex min-h-[30px] items-center gap-1.5 rounded-md bg-white px-3 text-[11px] font-bold uppercase tracking-wider text-brand">
+          <Icon name="cube" size={14} /> 3D Studio
+        </a>
       </nav>
       <div className="min-h-0 flex-1">
         {mode === 'emoji' ? <EmojiStudio /> : mode === 'tag' ? <TagBuilder active /> : mode === 'stamp' ? <StampPack active /> : <KeySet active />}

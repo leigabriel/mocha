@@ -22,6 +22,7 @@
     "opentype.js": "^2.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "reicon-react": "^1.2.6",
     "tailwindcss": "^4.3.3",
     "three": "^0.186.1"
   },

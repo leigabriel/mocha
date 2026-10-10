@@ -86,3 +86,16 @@ Notes: the 3D model is thin paper geometry with the printed pictures as textures
 - Generate button makes a random set; Reference restores the default.
 - Exports: PNG / JPG, GLTF (recommended) and GLB with lights, camera and the spin / swing loops, and a self-contained Blender script (draft / high / ultra) that swaps materials for Cycles glass, chrome, soft touch and frosted nodes, adds strip-light softboxes, a depth-of-field camera and a denoised render. It was run in Blender (bpy 5) to check it renders. Usage: `blender -b -P file.py -- out.png [--anim] [--samples N] [--res WxH] [--save set.blend]`.
 - Limits: a real .blend file cannot be written in the browser, so the script builds it; transmission materials in the live preview are an approximation of the Cycles render.
+
+## 3D Studio (`#/studio`)
+
+A full-page, Blender-style 3D editor, opened from the "3D Studio" button in the top bar (the Mocha tabs are replaced; Back returns).
+
+- Layout: menu bar, left toolbar (select/move/rotate/scale), viewport with axis gizmo, outliner + properties on the right, keyframe timeline, status bar. Icons come from `reicon-react`.
+- Objects: 13 parametric shapes (box, sphere, cylinder, cone, torus, plane, capsule, icosphere, star, heart, ring, 3D text, SVG extrude), point/spot/sun lights, cameras, groups, array and mirror modifiers.
+- Materials: plastic, clay, metal, chrome, glass, frosted, soft-touch, emissive.
+- Shortcuts: Q/G/R/S, Shift+A add, Shift+D duplicate, X/Delete, Ctrl+Z/Y, Ctrl+G group, F frame, I keyframe, Space play, 1/3/7/0 views.
+- Exports: GLB, glTF, OBJ, STL, PNG/JPG, project JSON, Blender script (Cycles). Animation is baked at 30 fps into GLB/glTF.
+- Autosaves to the browser (`mocha.studio.v1`).
+- Not yet: vertex/face edit mode, boolean cuts. The preview is three.js, so the Blender render looks different (lights are rescaled on import).
+- Code: `src/studio/*`, `src/hooks/useStudio.js`, `src/components/studio/*`, tests in `tests/studio.test.js`.
