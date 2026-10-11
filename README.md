@@ -87,3 +87,7 @@ Scene code lives in `src/three/`: `physics.js` (fixed-step pendulum), `pose.js` 
 ## 3D Studio
 
 Open the **3D Studio** button (or `#/studio`) for a Blender-style editor: shapes, lights, cameras, materials, keyframe animation, and export to GLB, glTF, OBJ, STL, PNG/JPG, project JSON or a Blender (Cycles) script. See `docs/V_TEST_CHANGES.md`.
+
+## Stickers tab
+
+Free built-in die-cut sticker and hang-tag designs as 3D models, with your own pack style (palette, font, border, finish) and a custom-sticker maker. Exports GLB, glTF, OBJ, STL, PNG, SVG (with cut path), sheet PNG/GLB and a PNG zip. See `docs/V_TEST_CHANGES.md`.
