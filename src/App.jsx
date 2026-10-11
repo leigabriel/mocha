@@ -6,6 +6,7 @@ import TagBuilder from './components/tagbuilder/TagBuilder.jsx';
 import StampPack from './components/stamppack/StampPack.jsx';
 import KeySet from './components/keyset/KeySet.jsx';
 import Animals from './components/animals/Animals.jsx';
+import Stickers from './components/stickers/Stickers.jsx';
 import Icon from './components/studio/icons.jsx';
 import { Seg } from './components/panel/ui.jsx';
 import { useKeychainStudio } from './hooks/useKeychainStudio.js';
@@ -16,6 +17,7 @@ const MODES = [
   { id: 'stamp', label: 'Stamp Pack' },
   { id: 'set', label: 'Keychain Set' },
   { id: 'animals', label: 'Animals' },
+  { id: 'stickers', label: 'Stickers' },
 ];
 
 const StudioApp = lazy(() => import('./components/studio/StudioApp.jsx'));
@@ -71,7 +73,7 @@ export default function App() {
         </a>
       </nav>
       <div className="min-h-0 flex-1">
-        {mode === 'emoji' ? <EmojiStudio /> : mode === 'tag' ? <TagBuilder active /> : mode === 'stamp' ? <StampPack active /> : mode === 'set' ? <KeySet active /> : <Animals />}
+        {mode === 'emoji' ? <EmojiStudio /> : mode === 'tag' ? <TagBuilder active /> : mode === 'stamp' ? <StampPack active /> : mode === 'set' ? <KeySet active /> : mode === 'animals' ? <Animals /> : <Stickers />}
       </div>
     </div>
   );

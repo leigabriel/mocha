@@ -109,3 +109,13 @@ New **Animals** tab: ten procedurally modelled, rigged animals (deer, parrot, do
 - Export: GLB / glTF with skins, textures and all clips (about 5-9 MB per animal).
 - Species notes come from `src/animals/descriptions/*.md`.
 - Caveats: procedural geometry, not hand-sculpted; no subsurface scattering in the web preview; fur is texture/normal-map based.
+
+## Stickers tab (v-test)
+
+New **Stickers** tab: free built-in die-cut stickers and hang tags (44 designs: type blobs, badges, tags and labels, signs, pixel art, shapes) shown as real 3D models, inspired by a die-cut sticker sheet reference.
+
+- Silhouettes come from signed-distance shapes traced with marching squares; the white cut border is a true offset of the art, and tags get a real eyelet hole plus an optional 3D hang cord.
+- Artwork is drawn on canvas from templates (badge, type, label, sign, tag, pixel, icon) using palette roles, so one **pack style** (6-colour palette, headline font, border mode and width, finish gloss/matte/holo/foil, thickness, corner softness, paper grain, cord) re-skins every sticker. Styles can be saved and a whole pack (style plus your own stickers) can be saved or loaded as a JSON file.
+- **My stickers**: build your own die-cut from a shape, artwork type, text, pictogram, colours, pattern and code.
+- Export one sticker as GLB, glTF, OBJ (zip with MTL and texture), STL, PNG (transparent die-cut) or SVG (with a magenta CutContour path), a 3D view PNG/JPG, or the whole pack as a sheet PNG, sheet GLB or PNG zip. Models are in metres.
+- Fonts are bundled (OFL). Japanese/Chinese text uses system CJK fonts.
