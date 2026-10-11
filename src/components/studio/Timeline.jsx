@@ -30,7 +30,7 @@ export default function Timeline({ s, store }) {
   };
 
   return (
-    <section className="st-timeline" aria-label="Timeline">
+    <section className="st-card st-timeline" aria-label="Timeline">
       <div className="st-tl-head">
         <button type="button" className="st-btn" onClick={() => store.setView({ playing: !s.playing })} aria-label={s.playing ? 'Pause' : 'Play'}>
           <Icon name={s.playing ? 'pause' : 'play'} size={15} weight="Filled" /> {s.playing ? 'Pause' : 'Play'}
@@ -52,7 +52,7 @@ export default function Timeline({ s, store }) {
             ))}
           </div>
           <div className="st-tl-head-line" style={{ left: 120 + s.time * PX }} />
-          {rows.length === 0 ? <div className="st-empty" style={{ position: 'sticky', left: 0, width: 360 }}>Select an object, move the playhead, change it, then press <b>I</b> to add keyframes.</div> : null}
+          {rows.length === 0 ? <div className="st-empty" style={{ position: 'sticky', left: 0, width: 360, marginLeft: 130, textAlign: 'left' }}>Select an object, move the playhead, change it, then press <b>I</b> to add keyframes.</div> : null}
           {rows.map((o) => (
             <div key={o.id} className="st-tl-track">
               <span className="st-tl-name" style={{ width: 120, position: 'absolute', left: 0, top: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</span>

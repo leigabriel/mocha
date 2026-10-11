@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from './icons.jsx';
-import { PRIMITIVES, LIGHTS } from '../../studio/constants.js';
+import { PRIMITIVES, LIGHTS, THEMES } from '../../studio/constants.js';
 import { FORMAT_INFO } from '../../studio/exporters.js';
-import { TEMPLATES } from '../../studio/templates.js';
 
 function Menu({ id, label, open, setOpen, children }) {
   return (
@@ -35,7 +34,7 @@ export default function MenuBar({ ui, s, store, onExit, pickProject, pickSvg }) 
   return (
     <header className="st-menubar" ref={ref}>
       <button type="button" className="st-brand st-btn" onClick={onExit} title="Back to Mocha" aria-label="Back to Mocha">
-        <Icon name="back" size={14} /> MOCHA 3D
+        <Icon name="back" size={14} /> <span>MOCHA 3D</span>
       </button>
       <Menu id="file" label="File" open={open} setOpen={setOpen}>
         <Item icon="add" onClick={() => ui.setDialog('templates')}>New from template…</Item>
@@ -60,6 +59,8 @@ export default function MenuBar({ ui, s, store, onExit, pickProject, pickSvg }) 
         <Item kbd="Esc" onClick={store.clearSelection}>Deselect</Item>
       </Menu>
       <Menu id="add" label="Add" open={open} setOpen={setOpen}>
+        <Item icon="shapes" onClick={() => ui.setDialog('library')}>Prebuilt models…</Item>
+        <div className="st-sep" />
         {['Mesh', 'Shape'].map((g) => (
           <div key={g}>
             <div className="st-label">{g}</div>
@@ -98,11 +99,12 @@ export default function MenuBar({ ui, s, store, onExit, pickProject, pickSvg }) 
         <Item icon="keyboard" onClick={() => ui.setDialog('keys')}>Keyboard shortcuts</Item>
         <Item icon="rocket" onClick={() => ui.setDialog('templates')}>Templates</Item>
       </Menu>
-      <span style={{ flex: 1 }} />
-      <span style={{ color: 'var(--st-dim)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.doc.name}</span>
+      <span className="st-doc-name">{s.doc.name}</span>
+      <div className="st-theme" role="group" aria-label="Theme">
+        {THEMES.map((t) => <button key={t.id} type="button" data-t={t.id} aria-pressed={ui.theme === t.id} title={`${t.label} theme`} aria-label={`${t.label} theme`} onClick={() => ui.setTheme(t.id)}><i />{t.label}</button>)}
+      </div>
       <button type="button" className="st-btn" disabled={!s.canUndo} onClick={store.undo} aria-label="Undo"><Icon name="undo" size={15} /></button>
       <button type="button" className="st-btn" disabled={!s.canRedo} onClick={store.redo} aria-label="Redo"><Icon name="redo" size={15} /></button>
-      <span className="hide-m" style={{ display: 'none' }}>{TEMPLATES.length}</span>
     </header>
   );
 }

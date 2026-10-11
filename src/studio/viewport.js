@@ -359,6 +359,7 @@ export function createStudioViewport(container, store) {
 
   // ------------------------------------------------------------------ API
   function frame(ids = store.getState().selection) {
+    built?.root.updateMatrixWorld(true);
     const nodes = ids.length ? nodesOf(ids) : built ? [built.root] : [];
     const box = new THREE.Box3();
     nodes.forEach((n) => {

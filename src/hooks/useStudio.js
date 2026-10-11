@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { downloadBlob } from '../utils/helpers.js';
 import { ensureFont, hasFont } from '../tagbuilder/fonts.js';
 import { parseSvgShapes } from '../tagbuilder/svg.js';
-import { LIMITS, PRIMITIVES } from '../studio/constants.js';
+import { LIMITS, PRIMITIVES, THEMES } from '../studio/constants.js';
 import { parseDoc } from '../studio/doc.js';
 import { FORMAT_INFO, exportStudio } from '../studio/exporters.js';
 import { createStudioStore } from '../studio/store.js';
 import { TEMPLATES } from '../studio/templates.js';
+import { libraryItem } from '../studio/library.js';
 import { createStudioViewport } from '../studio/viewport.js';
 
 const STORE_KEY = 'mocha.studio.v1';
+const THEME_KEY = 'mocha.studio.theme';
 
 function loadInitial() {
   try {
@@ -40,12 +42,33 @@ export function useStudio() {
   const [imageScale, setImageScale] = useState(2);
   const [transparent, setTransparent] = useState(false);
   const [quality, setQuality] = useState('high');
+  const [theme, setThemeState] = useState(() => {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      return THEMES.some((x) => x.id === t) ? t : 'studio';
+    } catch {
+      return 'studio';
+    }
+  });
+  const setTheme = useCallback((t) => {
+    if (!THEMES.some((x) => x.id === t)) return;
+    setThemeState(t);
+    try {
+      localStorage.setItem(THEME_KEY, t);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const showToast = useCallback((text) => {
     setToast({ text, visible: true });
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast((p) => ({ ...p, visible: false })), 2200);
   }, []);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__studioStore = store;
+  }, [store]);
 
   // viewport lifecycle
   useEffect(() => {
@@ -97,6 +120,16 @@ export function useStudio() {
   const addObject = useCallback((type) => {
     const o = store.add(type);
     if (!o) showToast(`MAX ${LIMITS.maxObjects} OBJECTS`);
+    setAddMenu(false);
+    return o;
+  }, [store, showToast]);
+
+  const addModel = useCallback((id) => {
+    const item = libraryItem(id);
+    if (!item) return null;
+    const o = store.addModel(item);
+    if (!o) showToast(`MAX ${LIMITS.maxObjects} OBJECTS`);
+    else showToast(`ADDED ${item.label.toUpperCase()}`);
     setAddMenu(false);
     return o;
   }, [store, showToast]);
@@ -212,7 +245,7 @@ export function useStudio() {
 
   const api = useMemo(() => ({
     store, state, toast, busy, dialog, setDialog, addMenu, setAddMenu, imageScale, setImageScale, transparent, setTransparent,
-    quality, setQuality, frame, setView, addObject, exportAs, renderImage, openProject, useTemplate, uploadSvg, showToast,
-  }), [state, toast, busy, dialog, addMenu, imageScale, transparent, quality, store, frame, setView, addObject, exportAs, renderImage, openProject, useTemplate, uploadSvg, showToast]);
+    quality, setQuality, theme, setTheme, frame, setView, addObject, addModel, exportAs, renderImage, openProject, useTemplate, uploadSvg, showToast,
+  }), [addModel, theme, setTheme, state, toast, busy, dialog, addMenu, imageScale, transparent, quality, store, frame, setView, addObject, exportAs, renderImage, openProject, useTemplate, uploadSvg, showToast]);
   return [containerRef, api];
 }

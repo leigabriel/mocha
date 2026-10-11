@@ -24,7 +24,7 @@ export const TEMPLATES = [
       obj('sphere', { name: 'Sphere', pos: [1.2, 0.5, 0], material: mat('glass', '#9fd8ff') }),
       obj('light:sun', { name: 'Sun', pos: [4, 6, 3] }),
       obj('camera', { name: 'Camera', pos: [0, 2.2, 6.5], rot: [-12, 0, 0] }),
-    ], { bg: 'light' }),
+    ], { bg: 'dark' }),
   },
   {
     id: 'keychain',
