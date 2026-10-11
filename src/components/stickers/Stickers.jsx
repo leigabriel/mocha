@@ -17,10 +17,10 @@ function Library({ p }) {
     <Section title="01 Sticker library" hint={`${p.defs.length} stickers`}>
       <div className="flex flex-wrap gap-1" role="group" aria-label="Sticker group">
         {groups.map((g) => (
-          <Seg key={g.id} pressed={p.group === g.id} onClick={() => p.setGroup(g.id)} className="min-h-[28px] px-2 text-[10px] uppercase">{g.label}</Seg>
+          <Seg key={g.id} pressed={p.group === g.id} onClick={() => p.setGroup(g.id)} className="min-h-[32px] px-2.5 text-[10px] uppercase">{g.label}</Seg>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Stickers">
+      <div className="grid grid-cols-4 gap-1.5 md:grid-cols-3" role="group" aria-label="Stickers">
         {shown.map((d) => (
           <button
             key={d.id}
@@ -29,7 +29,7 @@ function Library({ p }) {
             aria-label={d.name}
             title={d.name}
             onClick={() => p.select(d.id)}
-            className="seg flex aspect-square min-h-0 items-center justify-center overflow-hidden bg-black/35 p-1.5"
+            className="seg flex aspect-square min-h-[64px] items-center justify-center overflow-hidden bg-black/35 p-1.5"
           >
             {p.thumbs[d.id] ? <img src={p.thumbs[d.id]} alt="" draggable={false} className="max-h-full max-w-full object-contain" /> : <span className="text-[10px] opacity-60">…</span>}
           </button>
@@ -208,11 +208,17 @@ export default function Stickers() {
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-sceneLight md:flex-row">
       <Toast toast={p.toast} />
-      <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+      <main className="relative min-h-[200px] min-w-0 flex-1 overflow-hidden">
         <div ref={containerRef} tabIndex={0} role="application" aria-label={`3D sticker preview: ${p.current.name}`} className="h-full w-full touch-none"></div>
+        <div className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 md:hidden" role="group" aria-label="Quick download">
+          <span className="min-w-0 flex-1 truncate bg-black/65 px-2 py-2 text-[11px] uppercase tracking-wider text-white">{p.current.name}</span>
+          {['glb', 'png'].map((f) => (
+            <button key={f} type="button" disabled={p.busy} onClick={() => p.exportOne(f, f === 'png' ? 3 : 2)} className="min-h-[40px] min-w-[52px] border border-white/70 bg-black/65 px-2 text-[11px] font-bold uppercase text-white disabled:opacity-50">{f}</button>
+          ))}
+        </div>
         <p aria-hidden="true" className="pointer-events-none absolute left-3 top-3 hidden bg-black/60 px-2 py-1 text-[11px] uppercase tracking-wider text-white md:block">Drag to orbit · Scroll to zoom</p>
       </main>
-      <aside aria-label="Sticker controls" className="z-40 flex h-[52dvh] w-full shrink-0 flex-col border-t border-white/30 bg-brand text-white md:order-first md:h-full md:w-[360px] md:border-r md:border-t-0">
+      <aside aria-label="Sticker controls" className="z-40 flex h-[50dvh] w-full shrink-0 flex-col border-t border-white/30 bg-brand text-white md:order-first md:h-full md:w-[360px] md:border-r md:border-t-0">
         <header className="flex items-center justify-between gap-2 border-b border-white/30 p-3 md:p-4">
           <h1 className="font-pixel flex items-center gap-2.5 text-xs tracking-wider">
             <span className="inline-block h-2.5 w-2.5 bg-white" aria-hidden="true"></span>
