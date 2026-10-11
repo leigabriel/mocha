@@ -41,9 +41,21 @@ export function buildQuadruped(ctx) {
   const hw = sp.headW;
   const hh = sp.headH;
   const jaw = bone('Jaw', head, [0, -hh * 0.6, HL * 0.22]);
+  const headCurves = (() => {
+    const hp = an.head;
+    return {
+      rx: curve(hp.map(([t, a]) => [t, a * hw])),
+      ry: curve(hp.map(([t, , b]) => [t, b * hh])),
+      yc: curve(hp.map(([t, , , y]) => [t, y * hh * 0.6])),
+    };
+  })();
   const eyes = [['EyeL', 1], ['EyeR', -1]].map(([n, sx]) => {
     const e = an.eye;
-    return [bone(n, head, [sx * hw * e.side, hh * 0.3, HL * (0.1 + e.fwd * 0.9)]), sx];
+    const z = HL * (0.1 + e.fwd * 0.9);
+    const t = Math.min(1, Math.max(0, (z + HL * 0.12) / (HL * 1.04)));
+    const rx = headCurves.rx(t);
+    const ry = headCurves.ry(t);
+    return [bone(n, head, [sx * rx * e.lat, headCurves.yc(t) + ry * e.up, z]), sx];
   });
   const ears = [['EarL', 1], ['EarR', -1]].map(([n, sx]) => {
     const lean = sp.ear === 'fold' ? 0.5 : sp.ear === 'long' ? 0.6 : 0.3;
@@ -92,7 +104,7 @@ export function buildQuadruped(ctx) {
   const pinkNose = id === 'tiger' || id === 'cat';
   const noseM = skinMat('nose', pinkNose ? '#c98b86' : '#241a1c', pinkNose ? '#b06f6c' : '#3a2a2c');
   const innerEarM = skinMat('ear_inner', id === 'monkey' ? '#b98c78' : '#d9a79c', '#a6786b', 'fine', 0.7);
-  const faceSkin = skinMat('skin', id === 'monkey' ? '#c9a08a' : '#cf9b8b', '#a97a68', 'fine', 0.6);
+  const faceSkin = skinMat('skin', id === 'monkey' ? '#a98270' : '#cf9b8b', '#7d5a4b', 'fine', 0.6);
   const hardMat = (name, base, tip, streak = 1, rough = [0.28, 0.6]) => {
     const t = keratinTextures({ base, tip, streak, rough, size: 256 });
     Object.values(t).forEach(own);
@@ -254,9 +266,9 @@ export function buildQuadruped(ctx) {
   add(head, hgeo, mHead, 'Head');
   const noseZ = z1h - hw * 0.12;
   const noseY = yoh(0.97) * 0.6 + hh * 0.04;
-  const nose = ellipsoid(hw * 0.3, hh * 0.22, hw * 0.26, 14);
-  add(head, nose, noseM, 'Nose', [0, noseY, noseZ - hw * 0.08]);
-  for (const sx of [-1, 1]) add(head, ellipsoid(hw * 0.07, hh * 0.1, hw * 0.07, 8), new THREE.MeshStandardMaterial({ color: '#0d0809', roughness: 0.4 }), `Nostril${sx > 0 ? 'L' : 'R'}`, [sx * hw * 0.12, noseY - hh * 0.02, noseZ + hw * 0.16]);
+  const nose = ellipsoid(hw * (pinkNose ? 0.34 : 0.32), hh * (pinkNose ? 0.22 : 0.24), hw * 0.26, 14);
+  add(head, nose, noseM, 'Nose', [0, noseY + hh * 0.02, noseZ - hw * 0.0]);
+  for (const sx of [-1, 1]) add(head, ellipsoid(hw * 0.035, hh * (pinkNose ? 0.07 : 0.1), hw * 0.04, 8), new THREE.MeshStandardMaterial({ color: '#0d0809', roughness: 0.4 }), `Nostril${sx > 0 ? 'L' : 'R'}`, [sx * hw * 0.11, noseY - hh * 0.03, noseZ + hw * 0.06]);
   // lower jaw
   const jg = loft([V(0, 0, 0), V(0, -hh * 0.04, HL * 0.3), V(0, -hh * 0.12, HL * 0.62)], {
     rx: curve([[0, hw * 0.6], [0.5, hw * 0.46], [1, hw * 0.34]]), ry: curve([[0, hh * 0.3], [0.5, hh * 0.24], [1, hh * 0.18]]), segs: 16, rings: 14, up: [0, 1, 0], round: [0.05, 0.15],
@@ -276,7 +288,7 @@ export function buildQuadruped(ctx) {
     const pos = eg.getAttribute('position');
     const uv = eg.getAttribute('uv');
     for (let i = 0; i < pos.count; i++) uv.setXY(i, 0.5 + pos.getX(i) / (2 * r), 0.5 - pos.getY(i) / (2 * r));
-    const yaw = Math.atan2(eyeCfg.side, eyeCfg.fwd * 1.1);
+    const yaw = rad(eyeCfg.yaw);
     const m = add(eb, eg, eyeM, `${eb.name}_Ball`);
     m.rotation.y = sx * yaw;
     const lid = add(eb, new THREE.TorusGeometry(r * 1.02, r * 0.2, 8, 20), id === 'monkey' || id === 'cat' ? faceSkin : noseM, `${eb.name}_Lid`);
@@ -301,9 +313,10 @@ export function buildQuadruped(ctx) {
     add(head, merge(dots), padM, 'WhiskerFollicles');
   }
   if (o.face || id === 'monkey') {
-    const fg = loft([V(0, 0, HL * 0.28), V(0, -hh * 0.05, HL * 0.6), V(0, -hh * 0.12, HL * 0.86)], { rx: curve([[0, hw * 0.72], [1, hw * 0.52]]), ry: curve([[0, hh * 0.72], [1, hh * 0.46]]), segs: 24, rings: 14, up: [0, 1, 0], round: [0.0, 0.2] });
-    fg.translate(0, 0, 0.001);
-    add(head, fg, faceSkin, 'FaceSkin', [0, 0, hw * 0.04]);
+    const mz = ellipsoid(hw * 0.4, hh * 0.26, HL * 0.16, 16);
+    add(head, mz, faceSkin, 'FaceSkin', [0, yoh(0.82) * 0.6 - hh * 0.1, HL * 0.82]);
+    const bm = ellipsoid(hw * 0.78, hh * 0.1, hw * 0.3, 12);
+    add(head, bm, mHead, 'BrowRidge', [0, headCurves.yc(0.4) + headCurves.ry(0.4) * 0.62, HL * 0.42]);
   }
 
   // ears
@@ -367,7 +380,7 @@ export function buildQuadruped(ctx) {
     const fl = [];
     for (let i = 0; i < 5; i++) {
       const x = (i - 2) * 0.012;
-      fl.push(loft([V(x, hh * 0.85, HL * 0.12), V(x, hh * 0.85 + 0.03, HL * 0.28), V(x * 1.4, hh * 0.35, HL * 0.42)], { rx: curve([[0, 0.012], [1, 0.003]]), ry: () => 0.004, segs: 5, rings: 8, up: [1, 0, 0], round: [0, 0.2] }));
+      fl.push(loft([V(x * 0.6, hh * 0.9, HL * 0.04), V(x * 0.8, hh * 0.95 + 0.02, HL * 0.14), V(x, hh * 0.72, HL * 0.22)], { rx: curve([[0, 0.012], [1, 0.003]]), ry: () => 0.004, segs: 5, rings: 8, up: [1, 0, 0], round: [0, 0.2] }));
     }
     add(head, merge(fl), hairM, 'Forelock');
   }

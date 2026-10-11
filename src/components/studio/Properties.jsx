@@ -70,7 +70,7 @@ function ShapeTab({ o, set, uploadSvg }) {
       </Section>
       <Section title="Modifiers">
         {o.mods.map((m, i) => (
-          <div key={i} style={{ padding: 6, marginBottom: 6, borderRadius: 6, background: '#232326' }}>
+          <div key={i} style={{ padding: 6, marginBottom: 6, borderRadius: 6, background: 'rgba(0,0,0,.28)' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
               <strong style={{ flex: 1 }}>{m.type === 'array' ? 'Array' : 'Mirror'}</strong>
               <button type="button" className="st-mini" aria-label="Remove modifier" onClick={() => set({ mods: o.mods.filter((_, k) => k !== i) })}><Icon name="trash" size={13} /></button>

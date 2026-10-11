@@ -54,7 +54,7 @@ export const SPECIES = {
   monkey: quad({
     id: 'monkey', label: 'Monkey', blurb: 'Grasping hands, long prehensile tail.',
     bodyLen: 0.42, bodyW: 0.1, bodyH: 0.12, upper: 0.075, lower: 0.075, legR: 0.026, foot: 'hand', armBoost: 1.3,
-    neckLen: 0.07, neckAngle: 55, neckR: 0.05, headLen: 0.1, headW: 0.075, headH: 0.075, snout: 0.03, ear: 'round', earLen: 0.035,
+    neckLen: 0.07, neckAngle: 55, neckR: 0.05, headLen: 0.1, headW: 0.082, headH: 0.08, snout: 0.03, ear: 'round', earLen: 0.035,
     tailLen: 0.62, tailR: 0.02, tailKind: 'prehensile', colors: { coat: '#7a5a3a', belly: '#b99a74', accent: '#d9b494', dark: '#2a1d14' },
     options: { face: true },
   }),
@@ -74,7 +74,7 @@ export const SPECIES = {
   }),
   eagle: bird({
     id: 'eagle', label: 'Eagle', blurb: 'Broad wings, hooked beak, curved talons.', canFly: true,
-    bodyLen: 0.72, bodyR: 0.13, pitch: 28, legLen: 0.2, neckLen: 0.1, neckTilt: [28, -10], headR: 0.07, beak: { len: 0.085, h: 0.065, hook: true },
+    bodyLen: 0.72, bodyR: 0.13, pitch: 28, legLen: 0.2, neckLen: 0.1, neckTilt: [28, -10], headR: 0.07, beak: { len: 0.078, h: 0.05, hook: true },
     wing: { l1: 0.34, l2: 0.38, l3: 0.34, chord: 0.24 }, tail: { len: 0.34, w: 0.16, feathers: 7 }, toes: 'anis', talons: true,
     colors: { coat: '#4a3220', belly: '#5b3f29', wing: '#3a2616', accent: '#f4f1ea', beak: '#e6b422', skin: '#e6b422', dark: '#15100b' },
     options: { whiteHead: true },
