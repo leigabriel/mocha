@@ -103,11 +103,11 @@ export function buildBird(ctx) {
     if (g) add(body, g, mat, name);
   };
   const size = ostrich ? 1.0 : 1;
-  const fl = R * (ostrich ? 0.35 : 0.2) * size;
-  const fw = R * (ostrich ? 0.22 : 0.15) * size;
+  const fl = R * (ostrich ? 0.55 : 0.46) * size;
+  const fw = R * (ostrich ? 0.5 : 0.4) * size;
   const dorsal = (t, u) => Math.sin(u * Math.PI * 2) < -0.05;
-  coat(dorsal, mCoat, 'FeathersBack', { stepRings: ostrich ? 3 : 2, per: ostrich ? 14 : 22, len: fl, width: fw, tilt: ostrich ? 0.1 : 0.12, dir: -1, seed: 3, cardOpts: { curl: 0.25 } });
-  coat((t, u) => !dorsal(t, u), mBelly, 'FeathersBelly', { stepRings: 2, per: ostrich ? 10 : 22, len: fl * 0.9, width: fw, tilt: 0.1, dir: -1, seed: 9, cardOpts: { curl: 0.2 } });
+  coat(dorsal, mCoat, 'FeathersBack', { stepRings: ostrich ? 3 : 2, per: ostrich ? 14 : 22, len: fl, width: fw, tilt: ostrich ? 0.05 : 0.05, dir: -1, seed: 3, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 } });
+  coat((t, u) => !dorsal(t, u), mBelly, 'FeathersBelly', { stepRings: 2, per: ostrich ? 10 : 22, len: fl * 0.9, width: fw, tilt: 0.04, dir: -1, seed: 9, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 } });
 
   // ------------------------------------------------------------------ neck (skinned across Neck1/Neck2)
   const n0 = W(neck1);
@@ -125,13 +125,13 @@ export function buildBird(ctx) {
   skinTo(neckGeo, neckBones, { power: 3 });
   ctx.skinned(neckGeo, ostrich ? mHeadSkin : mUnder, 'Neck');
   if (!ostrich) {
-    const nf = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.65, width: nr * 0.45, tilt: 0.1, dir: -1, seed: 21, cardOpts: { curl: 0.2 }, skip: (t) => t > 0.97 });
+    const nf = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.9, width: nr * 0.9, tilt: 0.05, dir: -1, seed: 21, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t > 0.97 });
     if (nf) {
       skinTo(nf, neckBones, { power: 3 });
       ctx.skinned(nf, headWhite ? mHead : mCoat, 'NeckFeathers');
     }
     if (sheenM) {
-      const nsg = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 1.0, width: nr * 0.6, tilt: 0.2, dir: -1, seed: 5, skip: (t) => t < 0.55 || t > 0.95 });
+      const nsg = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.9, width: nr * 0.9, tilt: 0.07, dir: -1, seed: 5, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t < 0.55 || t > 0.95 });
       if (nsg) {
         skinTo(nsg, neckBones, { power: 3 });
         ctx.skinned(nsg, sheenM, 'NeckSheen');
@@ -139,7 +139,7 @@ export function buildBird(ctx) {
     }
   } else {
     // sparse neck down on the ostrich
-    const nd = coverLoft(neckGeo, { stepRings: 4, per: 8, len: nr * 1.6, width: nr * 0.7, tilt: 0.5, dir: -1, seed: 31, jitter: 0.8, skip: (t) => t > 0.9 || t < 0.04 });
+    const nd = coverLoft(neckGeo, { stepRings: 4, per: 8, len: nr * 0.9, width: nr * 0.6, tilt: 0.25, dir: -1, seed: 31, jitter: 0.5, skip: (t) => t > 0.9 || t < 0.04 });
     if (nd) {
       skinTo(nd, neckBones, { power: 3 });
       ctx.skinned(nd, mBody2(c.dark), 'NeckDown');
@@ -156,7 +156,7 @@ export function buildBird(ctx) {
   });
   add(head, hGeo, ostrich ? mHeadSkin : mUnder, 'Skull');
   if (!ostrich) {
-    const hf = coverLoft(hGeo, { stepRings: 2, per: 12, len: H * 0.6, width: H * 0.4, tilt: 0.12, dir: -1, seed: 41, skip: (t) => t > 0.8 });
+    const hf = coverLoft(hGeo, { stepRings: 2, per: 12, len: H * 0.55, width: H * 0.6, tilt: 0.05, dir: -1, seed: 41, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t > 0.8 });
     if (hf) add(head, hf, mHead, 'HeadFeathers');
   }
   // beak: lofted, curved for hooked species
