@@ -107,3 +107,54 @@
   .st-vp-hint { display: none; }
   .st-status span.hide-m { display: none; }
 }
+
+/* ---- Mocha theme: the 3D Studio chrome uses the same brand blue, white lines, square corners and
+   pixel fonts as the other tabs (the viewport stays neutral so models read clearly). ---- */
+.st-root {
+  --st-bg: #0034ff; --st-panel: #0034ff; --st-head: #002bd4; --st-field: rgba(0, 0, 0, .28); --st-field-h: rgba(255, 255, 255, .2);
+  --st-line: rgba(255, 255, 255, .3); --st-text: #fff; --st-dim: rgba(255, 255, 255, .85); --st-accent: #fff; --st-orange: #ffe36b;
+  font-family: 'Geist Pixel', monospace; font-size: 12px;
+}
+.st-root :where(*) { border-radius: 0; }
+.st-root .st-swatch i { border-radius: 50%; }
+.st-root .st-tl-key { border-radius: 0; }
+.st-brand { background: #fff; color: #0034ff; font-family: 'Silkscreen', monospace; letter-spacing: .08em; }
+.st-sec > h3, .st-label, .st-ph { font-family: 'Silkscreen', monospace; letter-spacing: .08em; }
+.st-btn[aria-pressed='true'], .st-tool[aria-pressed='true'], .st-chip[aria-pressed='true'], .st-item:hover, .st-row.sel { background: #fff; color: #0034ff; }
+.st-row.active { background: rgba(255, 255, 255, .35); color: #fff; }
+.st-btn, .st-menu > button, .st-tool, .st-chip, .st-item { border: 1px solid transparent; }
+.st-btn:hover, .st-menu > button:hover, .st-tool:hover, .st-chip:hover { border-color: rgba(255, 255, 255, .6); }
+.st-chip { border: 1px solid rgba(255, 255, 255, .35); }
+.st-pop, .st-modal { background: #0034ff; border: 1px solid #fff; box-shadow: none; }
+.st-sep { background: rgba(255, 255, 255, .3); }
+.st-item kbd, .st-kbd { background: rgba(0, 0, 0, .25); color: rgba(255, 255, 255, .85); }
+.st-item:hover kbd { background: rgba(0, 52, 255, .12); color: #0034ff; }
+.st-tabs { background: #002bd4; }
+.st-tab { color: rgba(255, 255, 255, .8); }
+.st-tab[aria-selected='true'] { background: #fff; color: #0034ff; box-shadow: none; }
+.st-tab:hover { color: #fff; background: rgba(255, 255, 255, .2); }
+.st-tab[aria-selected='true']:hover { color: #0034ff; background: #fff; }
+.st-tool[title]:hover::after, .st-tab[title]:hover::after { background: #fff; color: #0034ff; }
+.st-viewport { background: #212121; }
+.st-vp-hint { background: rgba(0, 0, 0, .6); color: #fff; }
+.st-vp-title { color: #fff; }
+.st-field input:focus { outline: 1px solid #fff; background: rgba(0, 0, 0, .4); }
+.st-field > span.x { color: #ffb3b3; } .st-field > span.y { color: #c4f7ad; } .st-field > span.z { color: #d4e3ff; }
+.st-select option { background: #0034ff; color: #fff; }
+.st-row .st-name input { background: rgba(0, 0, 0, .45); border-color: #fff; }
+.st-swatch { border: 1px solid rgba(255, 255, 255, .25); }
+.st-swatch[aria-pressed='true'] { border-color: #fff; background: rgba(255, 255, 255, .25); }
+.st-tl-ruler { background: #002bd4; }
+.st-tl-track { border-bottom: 1px solid rgba(255, 255, 255, .2); }
+.st-tl-name { background: rgba(0, 43, 212, .92); }
+.st-tl-head-line { background: #ffe36b; }
+.st-modal-bg { background: rgba(0, 20, 120, .7); }
+.st-card { border: 1px solid rgba(255, 255, 255, .45); }
+.st-card:hover { background: rgba(255, 255, 255, .2); border-color: #fff; }
+.st-card .ic { background: #fff; color: #0034ff; }
+.st-keys div { border-bottom: 1px solid rgba(255, 255, 255, .25); }
+.st-toast { background: #fff; color: #0034ff; font-family: 'Silkscreen', monospace; }
+.st-root ::-webkit-scrollbar-track { background: #0023b3; }
+.st-root ::-webkit-scrollbar-thumb { background: #fff; }
+.st-brand, .st-brand * { color: #0034ff !important; }
+.st-vp-title { color: #212121; text-shadow: none; }

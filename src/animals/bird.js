@@ -125,13 +125,13 @@ export function buildBird(ctx) {
   skinTo(neckGeo, neckBones, { power: 3 });
   ctx.skinned(neckGeo, ostrich ? mHeadSkin : mUnder, 'Neck');
   if (!ostrich) {
-    const nf = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.9, width: nr * 0.9, tilt: 0.05, dir: -1, seed: 21, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t > 0.97 });
+    const nf = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.9, width: nr * 0.9, tilt: 0.05, dir: -1, seed: 21, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t > 0.78 });
     if (nf) {
       skinTo(nf, neckBones, { power: 3 });
       ctx.skinned(nf, headWhite ? mHead : mCoat, 'NeckFeathers');
     }
     if (sheenM) {
-      const nsg = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.9, width: nr * 0.9, tilt: 0.07, dir: -1, seed: 5, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t < 0.55 || t > 0.95 });
+      const nsg = coverLoft(neckGeo, { stepRings: 2, per: 12, len: nr * 0.7, width: nr * 0.7, tilt: 0.05, dir: -1, seed: 5, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t < 0.6 || t > 0.9 });
       if (nsg) {
         skinTo(nsg, neckBones, { power: 3 });
         ctx.skinned(nsg, sheenM, 'NeckSheen');
@@ -184,7 +184,6 @@ export function buildBird(ctx) {
     lid.rotation.y = sx * 1.0;
     lid.scale.set(1, 1, 0.7);
     if (id === 'parrot') add(eb, new THREE.TorusGeometry(r * 1.9, r * 0.45, 6, 18), mHeadSkin, `${eb.name}_Ring`).rotation.y = sx * 1.0;
-    if (id === 'eagle') add(head, ellipsoid(H * 0.34, H * 0.1, H * 0.55, 8), mClaw, `${eb.name}_Brow`, [sx * H * 0.7, H * 0.5, H * 0.3]);
   }
 
   // ------------------------------------------------------------------ wings
