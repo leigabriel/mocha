@@ -60,7 +60,7 @@ export const SPECIES = {
   }),
   parrot: bird({
     id: 'parrot', label: 'Parrot', blurb: 'Hooked beak, vivid plumage, gripping toes.', canFly: true,
-    bodyLen: 0.3, bodyR: 0.085, pitch: 52, legLen: 0.08, neckLen: 0.07, neckTilt: [30, 10], headR: 0.055, beak: { len: 0.05, h: 0.04, hook: true },
+    bodyLen: 0.3, bodyR: 0.085, pitch: 52, legLen: 0.08, neckLen: 0.07, neckTilt: [30, 10], headR: 0.055, beak: { len: 0.07, h: 0.058, hook: true },
     wing: { l1: 0.09, l2: 0.1, l3: 0.12, chord: 0.085 }, tail: { len: 0.32, w: 0.05, feathers: 3 }, toes: 'zygo',
     colors: { coat: '#d62a2a', belly: '#e8433a', wing: '#1f5fd1', accent: '#f6c61a', beak: '#e8e2d4', skin: '#f2efe8', dark: '#1a1a1a' },
     options: {},

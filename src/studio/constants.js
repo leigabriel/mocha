@@ -56,6 +56,12 @@ export const BACKGROUNDS = {
   cobalt: { label: 'Cobalt', color: '#0b3dff' },
 };
 
+export const THEMES = [
+  { id: 'studio', label: 'Studio' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
+
 export const EASINGS = ['linear', 'ease', 'ease-in', 'ease-out'];
 export const FPS = 30;
 export const SNAP = Object.freeze({ move: 0.25, rotate: 15, scale: 0.1 });

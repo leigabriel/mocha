@@ -102,12 +102,12 @@ export function buildBird(ctx) {
     const g = coverLoft(bodyGeo, { skip: skipFn, ...opts });
     if (g) add(body, g, mat, name);
   };
-  const size = ostrich ? 1.0 : 1;
-  const fl = R * (ostrich ? 0.55 : 0.46) * size;
-  const fw = R * (ostrich ? 0.5 : 0.4) * size;
+  const size = ostrich ? 1.0 : id === 'parrot' ? 0.68 : 1;
+  const fl = R * (ostrich ? 0.3 : 0.46) * size;
+  const fw = R * (ostrich ? 0.3 : 0.4) * size;
   const dorsal = (t, u) => Math.sin(u * Math.PI * 2) < -0.05;
-  coat(dorsal, mCoat, 'FeathersBack', { stepRings: ostrich ? 3 : 2, per: ostrich ? 14 : 22, len: fl, width: fw, tilt: ostrich ? 0.05 : 0.05, dir: -1, seed: 3, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 } });
-  coat((t, u) => !dorsal(t, u), mBelly, 'FeathersBelly', { stepRings: 2, per: ostrich ? 10 : 22, len: fl * 0.9, width: fw, tilt: 0.04, dir: -1, seed: 9, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 } });
+  coat(dorsal, mCoat, 'FeathersBack', { stepRings: 2, per: ostrich ? 26 : 22, len: fl, width: fw, tilt: ostrich ? 0.05 : 0.05, dir: -1, seed: 3, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 } });
+  coat((t, u) => !dorsal(t, u), mBelly, 'FeathersBelly', { stepRings: 2, per: ostrich ? 20 : 22, len: fl * 0.9, width: fw, tilt: 0.04, dir: -1, seed: 9, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 } });
 
   // ------------------------------------------------------------------ neck (skinned across Neck1/Neck2)
   const n0 = W(neck1);
@@ -156,7 +156,7 @@ export function buildBird(ctx) {
   });
   add(head, hGeo, ostrich ? mHeadSkin : mUnder, 'Skull');
   if (!ostrich) {
-    const hf = coverLoft(hGeo, { stepRings: 2, per: 12, len: H * 0.55, width: H * 0.6, tilt: 0.05, dir: -1, seed: 41, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t > 0.8 });
+    const hf = coverLoft(hGeo, { stepRings: 2, per: 14, len: H * 0.36, width: H * 0.3, tilt: 0.05, dir: -1, seed: 41, jitter: 0.12, cardOpts: { curl: 0.15, bow: 0.03 }, skip: (t) => t > 0.7 });
     if (hf) add(head, hf, mHead, 'HeadFeathers');
   }
   // beak: lofted, curved for hooked species
@@ -213,25 +213,25 @@ export function buildBird(ctx) {
     flight(S, sd, w1, cov1, mCoat, 'CovertsArm');
     // forearm: secondaries along the trailing edge, with coverts over them
     const sec = [];
-    const nS = ostrich ? 10 : 9;
+    const nS = ostrich ? 14 : 14;
     for (let k = 0; k < nS; k++) {
       const u = k / (nS - 1);
-      sec.push({ pos: V(sd * w.l2 * u, -0.002 * k, -w.chord * 0.2), dir: V(sd * (0.18 - 0.28 * u + 0.1), 0, -1).normalize(), len: w.chord * (1.05 - 0.12 * u) * (ostrich ? 1.1 : 1), wid: Math.max(0.02, w.l2 / nS * 2.4), roll: (rnd() - 0.5) * 0.12 });
+      sec.push({ pos: V(sd * w.l2 * u, -0.002 * k, -w.chord * 0.2), dir: V(sd * (0.18 - 0.28 * u + 0.1), 0, -1).normalize(), len: w.chord * (1.05 - 0.12 * u) * (ostrich ? 1.1 : 1), wid: Math.max(0.025, w.l2 / nS * 3.4), roll: (rnd() - 0.5) * 0.12 });
     }
     flight(S, sd, w2, sec, mFlight, 'Secondaries');
     const cov2 = [];
     for (let r = 0; r < 2; r++) {
-      for (let k = 0; k < 8; k++) cov2.push({ pos: V(sd * w.l2 * (k / 8 + r * 0.03), 0.006 + r * 0.002, -w.chord * (0.05 + r * 0.16)), dir: V(sd * 0.1, 0, -1), len: w.chord * (0.5 + r * 0.2), wid: w.l2 / 8 * 1.6, roll: (rnd() - 0.5) * 0.15 });
+      for (let k = 0; k < 12; k++) cov2.push({ pos: V(sd * w.l2 * (k / 12 + r * 0.03), 0.006 + r * 0.002, -w.chord * (0.05 + r * 0.16)), dir: V(sd * 0.1, 0, -1), len: w.chord * (0.5 + r * 0.2), wid: w.l2 / 12 * 2.6, roll: (rnd() - 0.5) * 0.15 });
     }
     flight(S, sd, w2, cov2, mWing, 'CovertsFore');
     // hand: primaries fanned out along the wing tip, each one separate
     const prim = [];
-    const nP = ostrich ? 9 : 10;
+    const nP = ostrich ? 11 : 12;
     for (let k = 0; k < nP; k++) {
       const u = k / (nP - 1);
       const ang = 8 + u * 62;
       const d = dirOut(ang);
-      prim.push({ pos: V(sd * w.l3 * (0.12 + 0.5 * u), -0.004 * k, -w.chord * 0.12 * u), dir: d, len: (w.l3 * 1.05 + w.chord * 0.35) * (1 - u * 0.42), wid: Math.max(0.018, w.chord * 0.3), roll: (rnd() - 0.5) * 0.1 });
+      prim.push({ pos: V(sd * w.l3 * (0.12 + 0.5 * u), -0.004 * k, -w.chord * 0.12 * u), dir: d, len: (w.l3 * 1.05 + w.chord * 0.35) * (1 - u * 0.42), wid: Math.max(0.026, w.chord * 0.42), roll: (rnd() - 0.5) * 0.1 });
     }
     {
       const list = prim.map(({ pos, dir, len, wid, roll }) => {
@@ -242,7 +242,7 @@ export function buildBird(ctx) {
       add(w3, merge(list), mFlight, `Wing${S}_Primaries`);
     }
     const cov3 = [];
-    for (let k = 0; k < 7; k++) cov3.push({ pos: V(sd * w.l3 * (k / 7 * 0.7), 0.007, -w.chord * 0.04), dir: dirOut(25 + k * 4), len: w.chord * 0.55, wid: w.chord * 0.2, roll: 0 });
+    for (let k = 0; k < 10; k++) cov3.push({ pos: V(sd * w.l3 * (k / 10 * 0.8), 0.007, -w.chord * 0.04), dir: dirOut(25 + k * 3), len: w.chord * 0.6, wid: w.chord * 0.3, roll: 0 });
     flight(S, sd, w3, cov3, mWing, 'CovertsHand');
   }
 

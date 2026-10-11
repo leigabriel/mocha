@@ -89,6 +89,24 @@ export function createStudioStore(initialDoc = defaultDoc()) {
     return obj;
   }
 
+  /** Adds a prebuilt model (see library.js) as one group of editable parts, set apart from what's already there. */
+  function addModel(item) {
+    const parts = item.build();
+    if (doc.objects.length + parts.length + 1 > LIMITS.maxObjects) return null;
+    const roots = doc.objects.filter((o) => !o.parent && o.type === 'group').length;
+    const root = sanitizeObject(createObject('group', { pos: [((roots % 5) - 2) * 1.5, 0, Math.floor(roots / 5) * -1.5] }));
+    root.name = uniqueName(doc, item.label);
+    let objects = [...doc.objects, root];
+    for (const p of parts) {
+      const o = sanitizeObject(createObject(p.type, { ...p, parent: root.id }));
+      o.name = uniqueName({ objects }, p.name ?? o.name);
+      objects = [...objects, o];
+    }
+    commit({ ...doc, objects });
+    setView({ selection: [root.id] });
+    return root;
+  }
+
   /** Merges `patch` into one object. `record:false` is for live drags (commit once at the end). */
   function update(id, patch, opts) {
     commit({ ...doc, objects: doc.objects.map((o) => (o.id === id ? sanitizeObject({ ...o, ...patch, id }) : o)) }, opts);
@@ -204,7 +222,7 @@ export function createStudioStore(initialDoc = defaultDoc()) {
 
   return {
     subscribe, getState, setView,
-    undo, redo, add, update, updateMany, updateWorld, updateTime, rename, remove, duplicate, group, ungroup, setParent,
+    undo, redo, add, addModel, update, updateMany, updateWorld, updateTime, rename, remove, duplicate, group, ungroup, setParent,
     select, toggleSelect, selectAll, clearSelection, addKey, removeKey, moveKey, load, reset, save, touch,
     setTool: (tool) => setView({ tool }),
     setTime: (time) => setView({ time: Math.max(0, Math.min(doc.time.duration, time)) }),

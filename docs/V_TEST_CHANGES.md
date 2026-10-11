@@ -119,3 +119,10 @@ New **Stickers** tab: free built-in die-cut stickers and hang tags (44 designs: 
 - **My stickers**: build your own die-cut from a shape, artwork type, text, pictogram, colours, pattern and code.
 - Export one sticker as GLB, glTF, OBJ (zip with MTL and texture), STL, PNG (transparent die-cut) or SVG (with a magenta CutContour path), a 3D view PNG/JPG, or the whole pack as a sheet PNG, sheet GLB or PNG zip. Models are in metres.
 - Fonts are bundled (OFL). Japanese/Chinese text uses system CJK fonts.
+
+## 3D Studio redesign
+- Three themes (Studio blue, Light, Dark), switched from the menu bar and remembered in this browser.
+- Inter throughout, rounded floating panels, a Blender-style layout (tool shelf, viewport, outliner, properties, timeline, status bar).
+- Every panel owns its own grid cell, so nothing overlaps. The viewport hint and title moved into the header and status bar. On phones the outliner and properties share one panel with a switch, and the timeline is hidden.
+- Prebuilt models (Add > Prebuilt models, or the shelf button): 25 editable models in five groups (nature, animals, props, keychains, stickers). Each one is a group of ordinary parts that can be recoloured, moved or reshaped, and exported like anything else.
+- Fixed "Frame selected" using stale transforms right after adding objects.

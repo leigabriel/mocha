@@ -51,8 +51,8 @@ export default function Outliner({ s, store }) {
   const [renaming, setRenaming] = useState(null);
   const roots = s.doc.objects.filter((o) => !o.parent);
   return (
-    <section className="st-outliner" aria-label="Outliner">
-      <div className="st-ph"><Icon name="hierarchy" size={14} /> Outliner <span className="st-spacer" style={{ color: 'var(--st-dim)', fontWeight: 400 }}>{s.doc.objects.length} objects</span></div>
+    <section className="st-card st-outliner" aria-label="Outliner">
+      <div className="st-ph"><Icon name="hierarchy" size={14} /> Outliner <span className="st-count">{s.doc.objects.length} objects</span></div>
       <div className="st-tree">
         {roots.length ? roots.map((o) => <Node key={o.id} o={o} depth={0} doc={s.doc} selection={s.selection} store={store} renaming={renaming} setRenaming={setRenaming} />) : (
           <div className="st-empty">Nothing here yet.<br />Press <b>Shift+A</b> or use <b>Add</b> to create something.</div>

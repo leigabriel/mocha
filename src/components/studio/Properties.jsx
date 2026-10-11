@@ -48,7 +48,7 @@ function ObjectTab({ o, s, store }) {
           <button type="button" className="st-chip" style={{ marginTop: 4, width: '100%' }} aria-pressed={o.light.castShadow} onClick={() => set({ light: { ...o.light, castShadow: !o.light.castShadow } })}>Casts shadows</button>
         </Section>
       )}
-      {kind === 'camera' && <p style={{ color: 'var(--st-dim)' }}>Exports use this camera. Render menu → "Image from camera" saves what it sees.</p>}
+      {kind === 'camera' && <p className="st-note">Exports use this camera. Render menu → "Image from camera" saves what it sees.</p>}
     </>
   );
 }
@@ -70,7 +70,7 @@ function ShapeTab({ o, set, uploadSvg }) {
       </Section>
       <Section title="Modifiers">
         {o.mods.map((m, i) => (
-          <div key={i} style={{ padding: 6, marginBottom: 6, borderRadius: 6, background: 'rgba(0,0,0,.28)' }}>
+          <div key={i} className="st-mod">
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
               <strong style={{ flex: 1 }}>{m.type === 'array' ? 'Array' : 'Mirror'}</strong>
               <button type="button" className="st-mini" aria-label="Remove modifier" onClick={() => set({ mods: o.mods.filter((_, k) => k !== i) })}><Icon name="trash" size={13} /></button>
@@ -105,7 +105,7 @@ function MaterialTab({ o, set }) {
         <div className="st-grid3">
           {MATERIAL_PRESETS.map((p) => (
             <button key={p.id} type="button" className="st-swatch" aria-pressed={m.preset === p.id} onClick={() => setM({ preset: p.id })}>
-              <i style={{ background: swatch[p.id], border: '1px solid rgba(255,255,255,.25)' }} />{p.label}
+              <i style={{ background: swatch[p.id], border: '1px solid rgba(128,128,128,.5)' }} />{p.label}
             </button>
           ))}
         </div>
@@ -127,7 +127,7 @@ function MaterialTab({ o, set }) {
 function AnimTab({ o, s, store }) {
   return (
     <Section title="Keyframes">
-      <p style={{ color: 'var(--st-dim)', marginTop: 0 }}>Move the playhead on the timeline, change the object, then add a key. At least two keys make it animate.</p>
+      <p className="st-note">Move the playhead on the timeline, change the object, then add a key. At least two keys make it animate.</p>
       <button type="button" className="st-chip" style={{ width: '100%', marginBottom: 6 }} onClick={() => store.addKey(o.id)}><Icon name="key" size={13} /> Add key at {s.time.toFixed(2)}s</button>
       {o.keys.length === 0 && <div className="st-empty">No keys yet.</div>}
       {o.keys.map((k, i) => (
@@ -154,7 +154,7 @@ function WorldTab({ s, store }) {
       <Section title="Background">
         <div className="st-grid3">
           {Object.entries(BACKGROUNDS).map(([id, b]) => (
-            <button key={id} type="button" className="st-swatch" aria-pressed={w.bg === id} onClick={() => store.updateWorld({ bg: id })}><i style={{ background: b.color, border: '1px solid rgba(255,255,255,.3)' }} />{b.label}</button>
+            <button key={id} type="button" className="st-swatch" aria-pressed={w.bg === id} onClick={() => store.updateWorld({ bg: id })}><i style={{ background: b.color, border: '1px solid rgba(128,128,128,.5)' }} />{b.label}</button>
           ))}
         </div>
       </Section>
@@ -178,7 +178,7 @@ export default function Properties({ s, store, uploadSvg }) {
   const needsObject = tab !== 'world';
   const set = (patch, opts) => o && store.update(o.id, patch, opts);
   return (
-    <section className="st-props" aria-label="Properties">
+    <section className="st-card st-props" aria-label="Properties">
       <div className="st-tabs" role="tablist" aria-orientation="vertical">
         {TABS.map((t) => (
           <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} title={t.label} aria-label={t.label} className="st-tab" onClick={() => setTab(t.id)}>
@@ -194,7 +194,7 @@ export default function Properties({ s, store, uploadSvg }) {
           : tab === 'material' ? <MaterialTab o={o} set={set} />
           : tab === 'anim' ? <AnimTab o={o} s={s} store={store} />
           : <WorldTab s={s} store={store} />}
-        {s.selection.length > 1 && needsObject ? <p style={{ color: 'var(--st-dim)', marginTop: 12 }}>{s.selection.length} selected: showing the last one.</p> : null}
+        {s.selection.length > 1 && needsObject ? <p className="st-note" style={{ marginTop: 12 }}>{s.selection.length} selected: showing the last one.</p> : null}
       </div>
     </section>
   );
