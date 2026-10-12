@@ -3,6 +3,12 @@ import { ANATOMY } from './anatomy.js';
 import { curve, loft, skinTo } from './loft.js';
 import { eyeTexture, furTextures, keratinTextures, antlerTextures, skinTextures } from './textures.js';
 import { ellipsoid, merge, rad, rng } from './parts.js';
+import { Sculpt } from './sdf3.js';
+import { finishSculpt } from './sculptMesh.js';
+import { headPlan, hasHeadPlan } from './sculptHeads.js';
+import { addQuadBody, BODY } from './sculptQuad.js';
+import { makeCoat } from './coat.js';
+import { furGrainTextures } from './textures.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -40,7 +46,9 @@ export function buildQuadruped(ctx) {
   const HL = sp.headLen + sp.snout * 0.6;
   const hw = sp.headW;
   const hh = sp.headH;
-  const jaw = bone('Jaw', head, [0, -hh * 0.6, HL * 0.22]);
+  const idxOfBone = (b) => ctx.boneIndex(b);
+  const plan = hasHeadPlan(id) && BODY[id] ? headPlan(id, HL * 1.18) : null;
+  const jaw = bone('Jaw', head, plan ? plan.jaw : [0, -hh * 0.6, HL * 0.22]);
   const headCurves = (() => {
     const hp = an.head;
     return {
@@ -50,6 +58,7 @@ export function buildQuadruped(ctx) {
     };
   })();
   const eyes = [['EyeL', 1], ['EyeR', -1]].map(([n, sx]) => {
+    if (plan) return [bone(n, head, [sx * plan.eye[0], plan.eye[1], plan.eye[2]]), sx];
     const e = an.eye;
     const z = HL * (0.1 + e.fwd * 0.9);
     const t = Math.min(1, Math.max(0, (z + HL * 0.12) / (HL * 1.04)));
@@ -59,6 +68,7 @@ export function buildQuadruped(ctx) {
   });
   const ears = [['EarL', 1], ['EarR', -1]].map(([n, sx]) => {
     const lean = sp.ear === 'fold' ? 0.5 : sp.ear === 'long' ? 0.6 : 0.3;
+    if (plan) return [bone(n, head, [sx * plan.ear[0], plan.ear[1], plan.ear[2]], [0, 0, -sx * lean]), sx];
     return [bone(n, head, [sx * hw * 0.62, hh * 0.78, HL * 0.12], [0, 0, -sx * lean]), sx];
   });
   const tailKinds = {
@@ -127,10 +137,51 @@ export function buildQuadruped(ctx) {
   hairM.name = `${id}_hair`;
   own(hairM);
 
-  // ------------------------------------------------------------------ torso + neck (one skinned surface)
+  // ------------------------------------------------------------------ sculpted coat (body, neck, legs, head)
+  let mCoat = null;
+  if (plan) {
+    const gt = furGrainTextures({ size: 256, seed: 5 + id.length });
+    Object.values(gt).forEach(own);
+    mCoat = new THREE.MeshPhysicalMaterial({ ...gt, vertexColors: true, roughness: 1, metalness: 0, sheen: 0.8, sheenRoughness: 0.7, sheenColor: new THREE.Color(c.coat).lerp(new THREE.Color('#ffffff'), 0.5), normalScale: new THREE.Vector2(0.35, 0.35) });
+    mCoat.name = `${id}_coat`;
+    own(mCoat);
+  }
   const H = sp.bodyH;
   const Wd = sp.bodyW;
   const Lb = sp.bodyLen;
+  if (plan) {
+    const J = {};
+    for (const Lg of ['FL', 'BL']) {
+      const lb = legBones[Lg];
+      J[Lg] = { u: W(lb.upper).toArray(), l: W(lb.lower).toArray(), p: W(lb.paw).toArray() };
+    }
+    const nb = W(neck);
+    const nt = W(head);
+    const S = new Sculpt();
+    const info = addQuadBody(S, { id, sp, J, Hb, neckBase: nb.toArray(), neckTop: nt.toArray(), footH });
+    S.setFrame(head.matrixWorld);
+    plan.build(S);
+    S.setFrame(null);
+    const headInv = head.matrixWorld.clone().invert();
+    const coat = makeCoat(id, c, { ...info, L: Lb, HL, toHead: (p, out) => out.copy(p).applyMatrix4(headInv) });
+    const skin = [
+      { index: idxOfBone(body), a: V(0, Hb, -Lb * 0.5), b: V(0, Hb, Lb * 0.38) },
+      { index: idxOfBone(neck), a: nb, b: nt },
+      { index: idxOfBone(head), a: nt, b: W(head, 0, 0, HL) },
+    ];
+    for (const [Lg] of legDefs) {
+      const lb = legBones[Lg];
+      const pU = W(lb.upper);
+      const pL = W(lb.lower);
+      const pP = W(lb.paw);
+      skin.push({ index: idxOfBone(lb.upper), a: pU, b: pL }, { index: idxOfBone(lb.lower), a: pL, b: pP }, { index: idxOfBone(lb.paw), a: pP, b: pP.clone().add(V(0, -footH, 0)) });
+    }
+    const voxel = Math.max(0.004, (Lb + sp.neckLen + totalF) / 190);
+    const bodyGeo = finishSculpt(S, { voxel, skin, colorFn: coat, uvScale: 9 });
+    ctx.skinned(bodyGeo, mCoat, 'Body');
+  }
+
+  // ------------------------------------------------------------------ torso + neck (one skinned surface)
   const neckBase = W(neck);
   const neckTop = W(head);
   const neckMid = neckBase.clone().lerp(neckTop, 0.5);
@@ -145,7 +196,8 @@ export function buildQuadruped(ctx) {
     const t = ts.map((x) => x / tot);
     return { path: list.map((s) => s.p), rx: curve(list.map((s, i) => [t[i], s.rx])), ry: curve(list.map((s, i) => [t[i], s.ry])) };
   };
-  const idxOf = (b) => ctx.boneIndex(b);
+  const idxOf = idxOfBone;
+  if (!plan) {
   const stations = an.torso.map(([zf, yo, wf, hf]) => ({ p: V(0, Hb + yo * H, zf * Lb), rx: Wd * wf, ry: H * hf }));
   const tc = chain(stations);
   const torsoGeo = loft(tc.path, { rx: tc.rx, ry: tc.ry, segs: 40, rings: 80, up: [0, 1, 0], round: [0.02, 0.06], vRange: [0, 0.78] });
@@ -170,6 +222,7 @@ export function buildQuadruped(ctx) {
     { index: idxOf(neck), a: neckBase, b: neckTop },
   ], { power: 3 });
   ctx.skinned(neckGeo, mBody, 'Neck');
+  }
 
   // ------------------------------------------------------------------ legs
   const legProf = an.leg;
@@ -195,6 +248,7 @@ export function buildQuadruped(ctx) {
     const rx = (t) => rx0(t) * bulge(t);
     const ry = (t) => ry0(t) * bulge(t);
     void t;
+    if (!plan) {
     const g = loft(pts, { rx, ry, segs: 18, rings: 36, up: [0, 0, 1], round: [0.1, 0.0] });
     skinTo(g, [
       { index: idxOf(body), a: pU.clone().add(V(0, sp.legR * 4, 0)), b: pU.clone().add(V(0, sp.legR * 1, 0)) },
@@ -202,6 +256,7 @@ export function buildQuadruped(ctx) {
       { index: idxOf(lower), a: pL, b: pP },
     ], { power: 3 });
     ctx.skinned(g, mLeg, `${L}_Leg`);
+    }
 
     // feet
     if (sp.foot === 'hoof') {
@@ -234,18 +289,20 @@ export function buildQuadruped(ctx) {
     } else {
       // padded paw: ball of the foot, four toes, pads, and (dogs only) visible claws
       const pawLen = sp.legR * (id === 'tiger' ? 2.4 : 2.1);
+      if (!plan) {
       const pg = loft([V(0, footH * 0.35, 0), V(0, -footH * 0.35, sp.legR * 0.1), V(0, -footH * 0.8, pawLen * 0.35), V(0, -footH * 0.9, pawLen * 0.85)], {
         rx: curve([[0, sp.legR * 0.85], [0.5, sp.legR * 1.2], [1, sp.legR * 1.05]]), ry: curve([[0, sp.legR * 0.85], [0.5, footH * 0.5], [1, footH * 0.28]]), segs: 16, rings: 14, up: [1, 0, 0], round: [0.0, 0.3],
       });
       add(paw, pg, mLeg, `${L}_Paw`);
+      }
       for (let k = 0; k < 4; k++) {
         const x = (k - 1.5) * sp.legR * 0.46;
         const z = pawLen * (0.78 + (k === 1 || k === 2 ? 0.1 : 0));
-        add(paw, ellipsoid(sp.legR * 0.26, footH * 0.3, sp.legR * 0.36, 10), mLeg, `${L}_Toe${k}`, [x, -footH * 0.68, z]);
-        add(paw, ellipsoid(sp.legR * 0.16, footH * 0.06, sp.legR * 0.22, 8), padM, `${L}_ToePad${k}`, [x, -footH * 0.93, z]);
+        if (!plan) add(paw, ellipsoid(sp.legR * 0.26, footH * 0.3, sp.legR * 0.36, 10), mLeg, `${L}_Toe${k}`, [x, -footH * 0.68, z]);
+        if (!plan) add(paw, ellipsoid(sp.legR * 0.16, footH * 0.06, sp.legR * 0.22, 8), padM, `${L}_ToePad${k}`, [x, -footH * 0.93, z]);
         if (id === 'dog') add(paw, new THREE.ConeGeometry(sp.legR * 0.12, sp.legR * 0.55, 6).rotateX(Math.PI * 0.62).translate(x, -footH * 0.7, z + sp.legR * 0.3), clawM, `${L}_Claw${k}`);
       }
-      add(paw, ellipsoid(sp.legR * 0.62, footH * 0.06, sp.legR * 0.55, 10), padM, `${L}_Pad`, [0, -footH * 0.95, pawLen * 0.32]);
+      if (!plan) add(paw, ellipsoid(sp.legR * 0.62, footH * 0.06, sp.legR * 0.55, 10), padM, `${L}_Pad`, [0, -footH * 0.95, pawLen * 0.32]);
     }
     void d;
   }
@@ -262,20 +319,36 @@ export function buildQuadruped(ctx) {
     const t = i / 8;
     hpath.push(V(0, yoh(t) * 0.6, z0h + (z1h - z0h) * t));
   }
-  const hgeo = loft(hpath, { rx: rxh, ry: ryh, segs: 32, rings: 56, up: [0, 1, 0], round: [0.12, 0.1] });
-  add(head, hgeo, mHead, 'Head');
+  if (!plan) {
+    const hgeo = loft(hpath, { rx: rxh, ry: ryh, segs: 32, rings: 56, up: [0, 1, 0], round: [0.12, 0.1] });
+    add(head, hgeo, mHead, 'Head');
+  }
   const noseZ = z1h - hw * 0.12;
   const noseY = yoh(0.97) * 0.6 + hh * 0.04;
-  const nose = ellipsoid(hw * (pinkNose ? 0.34 : 0.32), hh * (pinkNose ? 0.22 : 0.24), hw * 0.26, 14);
-  add(head, nose, noseM, 'Nose', [0, noseY + hh * 0.02, noseZ - hw * 0.0]);
-  for (const sx of [-1, 1]) add(head, ellipsoid(hw * 0.035, hh * (pinkNose ? 0.07 : 0.1), hw * 0.04, 8), new THREE.MeshStandardMaterial({ color: '#0d0809', roughness: 0.4 }), `Nostril${sx > 0 ? 'L' : 'R'}`, [sx * hw * 0.11, noseY - hh * 0.03, noseZ + hw * 0.06]);
+  const nose = plan ? ellipsoid(plan.noseR[0] * 0.92, plan.noseR[1] * 0.85, plan.noseR[2] * 0.8, 14) : ellipsoid(hw * (pinkNose ? 0.34 : 0.32), hh * (pinkNose ? 0.22 : 0.24), hw * 0.26, 14);
+  add(head, nose, noseM, 'Nose', plan ? [0, plan.nose[1] + plan.noseR[1] * 0.1, plan.nose[2] - plan.noseR[2] * 0.15] : [0, noseY + hh * 0.02, noseZ - hw * 0.0]);
+  if (!plan) for (const sx of [-1, 1]) add(head, ellipsoid(hw * 0.035, hh * (pinkNose ? 0.07 : 0.1), hw * 0.04, 8), new THREE.MeshStandardMaterial({ color: '#0d0809', roughness: 0.4 }), `Nostril${sx > 0 ? 'L' : 'R'}`, [sx * hw * 0.11, noseY - hh * 0.03, noseZ + hw * 0.06]);
   // lower jaw
-  const jg = loft([V(0, 0, 0), V(0, -hh * 0.04, HL * 0.3), V(0, -hh * 0.12, HL * 0.62)], {
-    rx: curve([[0, hw * 0.6], [0.5, hw * 0.46], [1, hw * 0.34]]), ry: curve([[0, hh * 0.3], [0.5, hh * 0.24], [1, hh * 0.18]]), segs: 16, rings: 14, up: [0, 1, 0], round: [0.05, 0.15],
-  });
-  add(jaw, jg, mJaw, 'LowerJaw', [0, 0, 0]);
+  if (plan) {
+    const JS = new Sculpt();
+    plan.jawParts(JS);
+    const jawGeo = finishSculpt(JS, { voxel: Math.max(0.002, HL / 90), colorFn: () => [1, 1, 1], uvScale: 5 });
+    jawGeo.translate(-plan.jaw[0], -plan.jaw[1], -plan.jaw[2]);
+    add(jaw, jawGeo, mCoat, 'LowerJaw', [0, 0, 0]);
+  } else {
+    const jg = loft([V(0, 0, 0), V(0, -hh * 0.04, HL * 0.3), V(0, -hh * 0.12, HL * 0.62)], {
+      rx: curve([[0, hw * 0.6], [0.5, hw * 0.46], [1, hw * 0.34]]), ry: curve([[0, hh * 0.3], [0.5, hh * 0.24], [1, hh * 0.18]]), segs: 16, rings: 14, up: [0, 1, 0], round: [0.05, 0.15],
+    });
+    add(jaw, jg, mJaw, 'LowerJaw', [0, 0, 0]);
+  }
   add(jaw, ellipsoid(hw * 0.16, hh * 0.035, HL * 0.12, 10), new THREE.MeshStandardMaterial({ color: '#b95b66', roughness: 0.5 }), 'Tongue', [0, hh * 0.04, HL * 0.28]);
-  if (id === 'tiger' || id === 'cat' || id === 'dog') {
+  if (plan?.fang) {
+    const [fx, fy, fz, fs] = plan.fang;
+    for (const sx of [-1, 1]) {
+      add(head, new THREE.ConeGeometry(fs, fs * 4, 8).translate(0, -fs * 2, 0), toothM, `UpperFang${sx > 0 ? 'L' : 'R'}`, [sx * fx, fy, fz]);
+      add(jaw, new THREE.ConeGeometry(fs * 0.8, fs * 3.2, 8).translate(0, fs * 1.6, 0), toothM, `LowerFang${sx > 0 ? 'L' : 'R'}`, [sx * fx * 0.8, fy - plan.jaw[1] - fs * 0.5, fz - plan.jaw[2] - fs * 0.5]);
+    }
+  } else if (id === 'tiger' || id === 'cat' || id === 'dog') {
     for (const sx of [-1, 1]) {
       add(head, new THREE.ConeGeometry(hw * 0.075, hh * 0.45, 8).translate(0, -hh * 0.22, 0), toothM, `UpperFang${sx > 0 ? 'L' : 'R'}`, [sx * hw * 0.24, yoh(0.82) * 0.6 - hh * 0.2, HL * 0.76]);
       add(jaw, new THREE.ConeGeometry(hw * 0.06, hh * 0.36, 8).translate(0, hh * 0.16, 0), toothM, `LowerFang${sx > 0 ? 'L' : 'R'}`, [sx * hw * 0.2, hh * 0.1, HL * 0.5]);
@@ -283,7 +356,7 @@ export function buildQuadruped(ctx) {
   }
   // eyes with lids
   for (const [eb, sx] of eyes) {
-    const r = Math.max(0.007, hw * eyeCfg.r * 1.15);
+    const r = plan ? plan.eyeR : Math.max(0.007, hw * eyeCfg.r * 1.15);
     const eg = new THREE.SphereGeometry(r, 24, 18);
     const pos = eg.getAttribute('position');
     const uv = eg.getAttribute('uv');
@@ -296,7 +369,7 @@ export function buildQuadruped(ctx) {
     lid.scale.set(1, 1, 0.7);
   }
   // whiskers and follicles
-  if (id === 'cat' || id === 'tiger' || id === 'dog') {
+  if (!plan && (id === 'cat' || id === 'tiger' || id === 'dog')) {
     const wh = [];
     const nW = id === 'dog' ? 2 : 4;
     for (const sx of [1, -1]) {

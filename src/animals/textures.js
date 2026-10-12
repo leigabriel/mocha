@@ -344,3 +344,27 @@ export function eyeTexture({ iris = '#6b4a22', pupil = 'round', sclera = '#3b2c2
   t.wrapS = THREE.ClampToEdgeWrapping;
   return t;
 }
+
+/**
+ * Tileable fur grain for sculpted bodies (the colour comes from vertex colours; this only adds the hair
+ * texture): returns a soft luminance map, a normal map and a roughness map that repeat in u and v.
+ */
+export function furGrainTextures({ size = 256, seed = 21, density = 1, strand = 1 }) {
+  const N = Math.round(160 * density);
+  const f = (u, v) => {
+    const a = vnoise(u * N, v * 10 * strand, seed, N);
+    const b = vnoise(u * N * 0.5, v * 5 * strand, seed + 3, Math.round(N * 0.5));
+    return 0.6 * a + 0.4 * b;
+  };
+  // crossfade so the pattern is periodic in v as well
+  const g = (u, v) => f(u, v) * (1 - v) + f(u, v + 1) * v;
+  const paint = (u, v) => {
+    const k = 0.8 + g(u, v) * 0.3;
+    return [k, k, k];
+  };
+  const t = bake(size, paint, { grain: (u, v) => g(u, v), normalStrength: 3.0, rough: [0.78, 0.98], seed });
+  for (const key of ['map', 'normalMap', 'roughnessMap']) {
+    if (t[key]) t[key].wrapT = THREE.RepeatWrapping;
+  }
+  return t;
+}
