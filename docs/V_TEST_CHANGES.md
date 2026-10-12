@@ -126,3 +126,10 @@ New **Stickers** tab: free built-in die-cut stickers and hang tags (44 designs: 
 - Every panel owns its own grid cell, so nothing overlaps. The viewport hint and title moved into the header and status bar. On phones the outliner and properties share one panel with a switch, and the timeline is hidden.
 - Prebuilt models (Add > Prebuilt models, or the shelf button): 25 editable models in five groups (nature, animals, props, keychains, stickers). Each one is a group of ordinary parts that can be recoloured, moved or reshaped, and exported like anything else.
 - Fixed "Frame selected" using stale transforms right after adding objects.
+
+## Landing page (Home)
+
+- The site now opens on **Home** (`#/`). The original app moved to **Playground** (`#/playground`); `#/studio` is unchanged. Share links (`#d=`, `#t=`) still open the Playground directly. Route logic is in `src/routes.js` (tested in `tests/routes.test.js`).
+- Home (`src/components/landing/`): top-left "Mocha Studio", top-right "Playground". GSAP + ScrollTrigger: a pixel charm that assembles and extrudes (canvas), masked wordmark reveal, scroll-velocity marquee, word-by-word statement, pinned horizontal tour of the seven tools, a scroll-filled four-step process, and a magnetic call to action. Type is Geist Pixel (display) and Inter (text).
+- Reduced motion: no scatter, marquee drift, scrubbing or pinning; the tool list becomes a plain wrap. Below 900 px the tools stack in a column.
+- Verified in Chromium at 1440×900 and 390×844 (screenshots, no console errors, no horizontal overflow, navigation Home ↔ Playground ↔ share link). Not tested: real touch devices, Safari/Firefox, the reduced-motion layout.

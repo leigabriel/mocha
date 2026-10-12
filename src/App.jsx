@@ -9,6 +9,7 @@ import Animals from './components/animals/Animals.jsx';
 import Stickers from './components/stickers/Stickers.jsx';
 import Icon from './components/studio/icons.jsx';
 import { Seg } from './components/panel/ui.jsx';
+import { routeOf } from './routes.js';
 import { useKeychainStudio } from './hooks/useKeychainStudio.js';
 
 const MODES = [
@@ -21,7 +22,9 @@ const MODES = [
 ];
 
 const StudioApp = lazy(() => import('./components/studio/StudioApp.jsx'));
-const inStudio = () => typeof window !== 'undefined' && window.location.hash.startsWith('#/studio');
+const Landing = lazy(() => import('./components/landing/Landing.jsx'));
+
+const currentRoute = () => (typeof window !== 'undefined' ? routeOf(window.location.hash) : 'home');
 
 const initialMode = () => (typeof window !== 'undefined' && window.location.hash.startsWith('#t=') ? 'tag' : 'emoji');
 
@@ -38,7 +41,7 @@ function EmojiStudio() {
 
 export default function App() {
   const [mode, setMode] = useState(initialMode);
-  const [studio, setStudio] = useState(inStudio);
+  const [route, setRoute] = useState(currentRoute);
 
   useEffect(() => {
     const nav = document.querySelector('nav[aria-label="Studio mode"]');
@@ -47,18 +50,24 @@ export default function App() {
   }, [mode]);
 
   useEffect(() => {
-    const onHash = () => setStudio(inStudio());
+    const onHash = () => setRoute(currentRoute());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   const exitStudio = () => {
-    if (window.history.length > 1 && inStudio()) window.history.back();
-    else window.location.hash = '';
-    setStudio(false);
+    window.location.hash = '#/playground';
   };
 
-  if (studio) {
+  if (route === 'home') {
+    return (
+      <Suspense fallback={<div className="grid h-dvh w-screen place-items-center bg-brand text-sm text-white/80">Loading…</div>}>
+        <Landing />
+      </Suspense>
+    );
+  }
+
+  if (route === 'studio') {
     return (
       <Suspense fallback={<div className="grid h-dvh w-screen place-items-center bg-[#1d1d1d] text-sm text-white/70">Loading 3D Studio…</div>}>
         <StudioApp onExit={exitStudio} />
@@ -69,6 +78,7 @@ export default function App() {
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden bg-brand">
       <nav aria-label="Studio mode" className="z-50 flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/30 bg-brand px-3 py-1.5 text-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <a href="#/" aria-label="Mocha Studio home" className="mr-2 inline-flex min-h-[34px] shrink-0 items-center px-2 text-sm font-bold text-white">Mocha</a>
         {MODES.map((m) => (
           <Seg key={m.id} pressed={mode === m.id} onClick={() => setMode(m.id)} className="min-h-[34px] shrink-0 whitespace-nowrap px-3 text-[11px] font-bold uppercase tracking-wider">
             {m.label}
