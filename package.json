@@ -19,7 +19,6 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/silkscreen": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
-    "animejs": "^4.5.0",
     "gsap": "^3.15.0",
     "opentype.js": "^2.0.0",
     "react": "^19.2.8",

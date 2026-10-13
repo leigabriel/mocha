@@ -30,7 +30,7 @@ export default function HeroCharm({ reduced }) {
       cells.push({ x, y, color, side: shade(color, 0.62), fx: 0, fy: 0, depth: 0, a: reduced ? 1 : 0 });
     }));
 
-    const state = { tx: 0, ty: 0, swing: 0, pointer: false };
+    const state = { tx: 1.6, ty: 0.9, swing: 0 };
     let w = 0;
     let h = 0;
     let dpr = 1;
@@ -93,26 +93,15 @@ export default function HeroCharm({ reduced }) {
       });
       tl.to(cells, { fx: 0, fy: 0, duration: 1.15, ease: 'expo.out', stagger: { amount: 0.9, from: 'random' } }, 0.1);
       tl.to(cells, { depth: 1, duration: 0.9, ease: 'power3.out', stagger: { amount: 0.4, from: 'center', grid: [NY, NX] } }, 1.1);
-      // idle swing, like the charm hanging off a chain
-      gsap.to(state, { swing: 0.9, duration: 2.2, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: 2.2 });
       raf = requestAnimationFrame(loop);
     });
 
-    const toX = gsap.quickTo(state, 'tx', { duration: 0.8, ease: 'power3.out' });
-    const toY = gsap.quickTo(state, 'ty', { duration: 0.8, ease: 'power3.out' });
-    const onMove = (e) => {
-      toX((e.clientX / window.innerWidth - 0.5) * 5);
-      toY((e.clientY / window.innerHeight - 0.5) * 3);
-    };
-    if (!reduced) window.addEventListener('pointermove', onMove);
-
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener('pointermove', onMove);
       ro.disconnect();
       ctxG.revert();
     };
   }, [reduced]);
 
-  return <canvas ref={canvasRef} className="lp-charm" role="img" aria-label="A pixel-art coffee cup keychain charm that tilts as you move the pointer" />;
+  return <canvas ref={canvasRef} className="lp-charm" role="img" aria-label="A pixel-art coffee cup keychain charm" />;
 }
